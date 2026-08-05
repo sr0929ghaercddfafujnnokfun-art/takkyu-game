@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>卓球ゲーム - Phase 1</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; overflow: hidden;
+    background: #0a1410;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+  }
+  #app { position: relative; width: 100%; height: 100%; }
+  canvas { display: block; position: absolute; inset: 0; touch-action: none; }
+
+  /* ---- HUD ---- */
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: max(12px, env(safe-area-inset-top)) 18px 0;
+    z-index: 5; pointer-events: none;
+    color: #e8fff4;
+  }
+  .scoreBox { text-align: center; min-width: 64px; }
+  .scoreLabel { font-size: 11px; letter-spacing: .12em; opacity: .7; margin-bottom: 2px; }
+  .scoreVal {
+    font-size: 34px; font-weight: 800; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    transition: transform .12s ease-out;
+  }
+  .scoreVal.pop { transform: scale(1.35); }
+  #pScore { color: #6fc2ff; }
+  #cScore { color: #ff8a7d; }
+  #centerHud { text-align: center; padding-top: 6px; }
+  #rallyView { font-size: 12px; opacity: .6; letter-spacing: .1em; }
+  #serveMsg {
+    font-size: 13px; font-weight: 700; margin-top: 4px;
+    color: #ffd54a; min-height: 18px;
+  }
+
+  /* ---- overlays ---- */
+  .screen {
+    position: absolute; inset: 0; z-index: 10;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center; padding: 28px;
+    background: rgba(4, 14, 10, .78);
+    backdrop-filter: blur(3px);
+    color: #eafff2;
+  }
+  .screen.hidden { display: none; }
+  .screen h1 { font-size: 30px; font-weight: 800; margin-bottom: 6px; letter-spacing: .02em; }
+  .screen h2 { font-size: 15px; font-weight: 600; opacity: .75; margin-bottom: 22px; }
+  .screen p { font-size: 13.5px; line-height: 1.85; opacity: .85; margin-bottom: 24px; }
+  .btn {
+    background: #ffd54a; color: #2b2205; border: none;
+    padding: 15px 42px; border-radius: 30px;
+    font-size: 16px; font-weight: 800; letter-spacing: .05em;
+    pointer-events: auto; cursor: pointer;
+  }
+  .btn:active { transform: scale(.96); }
+  .btn.sub {
+    background: transparent; color: #eafff2;
+    border: 1.5px solid rgba(255,255,255,.35);
+    padding: 11px 28px; font-size: 14px; margin-top: 12px;
+  }
+  #resultStats {
+    font-size: 13px; line-height: 2; opacity: .8;
+    margin-bottom: 22px; text-align: left;
+    border-top: 1px solid rgba(255,255,255,.15);
+    border-bottom: 1px solid rgba(255,255,255,.15);
+    padding: 12px 4px;
+    min-width: 200px;
+  }
+  #resultStats span { float: right; font-weight: 700; opacity: 1; }
+  #bigScore { font-size: 42px; font-weight: 800; margin-bottom: 18px; letter-spacing: .04em; }
+  .phaseTag {
+    position: absolute; bottom: 10px; left: 0; right: 0;
+    text-align: center; font-size: 10px; opacity: .3; color: #eafff2;
+    z-index: 4; pointer-events: none; letter-spacing: .1em;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv"></canvas>
+
+  <div id="hud">
+    <div class="scoreBox">
+      <div class="scoreLabel">YOU</div>
+      <div class="scoreVal" id="pScore">0</div>
+    </div>
+    <div id="centerHud">
+      <div id="rallyView"></div>
+      <div id="serveMsg"></div>
+    </div>
+    <div class="scoreBox">
+      <div class="scoreLabel">CPU</div>
+      <div class="scoreVal" id="cScore">0</div>
+    </div>
+  </div>
+
+  <div class="phaseTag">PHASE 1 — 物理 / 操作 / CPU / 得点</div>
+
+  <div class="screen" id="titleScreen">
+    <h1>卓球ゲーム</h1>
+    <h2>PHASE 1 プロトタイプ</h2>
+    <p>
+      画面を指でなぞってラケットを左右に動かす<br>
+      ボールが当たれば自動で返球される<br>
+      <strong>11点先取</strong>で勝利
+    </p>
+    <button class="btn" id="startBtn">はじめる</button>
+  </div>
+
+  <div class="screen hidden" id="resultScreen">
+    <h1 id="resultTitle">WIN!</h1>
+    <div id="bigScore">11 - 5</div>
+    <div id="resultStats">
+      最大ラリー <span id="stMaxRally">0</span><br>
+      総ラリー数 <span id="stTotalRally">0</span><br>
+      返球成功率 <span id="stAccuracy">0%</span>
+    </div>
+    <button class="btn" id="againBtn">もう一度</button>
+    <button class="btn sub" id="toTitleBtn">タイトルへ</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+'use strict';
+
+// ═══════════════════════════════════════════
+//  定数（要件定義書 v2.0 第3章・第4章に準拠）
+// ═══════════════════════════════════════════
+const TABLE_HALF_X = 0.7625;
+const TABLE_HALF_Z = 1.37;
+const TABLE_THICK  = 0.04;
+const NET_H        = 0.1525;
+const NET_HALF_X   = 0.915;
+const BALL_R       = 0.02;
+const BALL_R_VIEW  = 0.025;
+const PADDLE_R     = 0.085;
+const PADDLE_Y     = 0.20;          // MVPではY固定
+const PLAYER_Z     = 1.60;
+const CPU_Z        = -1.60;
+const PADDLE_X_LIM = 0.95;
+
+const GRAVITY      = -4.2;
+const REST_TABLE   = 0.78;
+const AIR_DRAG     = 0.998;
+
+// 判定の甘さ（第4.4章：見た目より20%大きく）
+const HIT_R_X      = (PADDLE_R + BALL_R) * 1.2;
+const HIT_R_Y      = (PADDLE_R + BALL_R) * 1.55;  // 縦は体感重視でさらに緩め
+
+// CPU（第8章：難易度「ふつう」）
+const CPU_SPEED    = 2.1;
+const CPU_DELAY    = 0.12;
+const CPU_ERROR    = 0.12;
+const CPU_MISS     = 0.08;
+
+const WIN_SCORE    = 11;
+const SERVE_WAIT   = 1.0;
+
+// ═══════════════════════════════════════════
+//  Three.js セットアップ
+// ═══════════════════════════════════════════
+const canvas = document.getElementById('cv');
+if (typeof THREE === 'undefined') {
+  document.getElementById('titleScreen').innerHTML =
+    '<h1>読み込みエラー</h1><p>3Dライブラリを読み込めませんでした。<br>通信環境を確認して再読み込みしてください。</p>';
+  return;
+}
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a1410);
+scene.fog = new THREE.Fog(0x0a1410, 3.2, 8.5);
+
+const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 30);
+camera.position.set(0, 0.95, 2.45);
+const camLook = new THREE.Vector3(0, 0.15, -0.4);
+camera.lookAt(camLook);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+resize();
+
+// ── ライト ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.62));
+const key = new THREE.DirectionalLight(0xffffff, 0.85);
+key.position.set(1.5, 3.2, 1.8);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x88c8ff, 0.3);
+rim.position.set(-1.5, 1.8, -2.5);
+scene.add(rim);
+
+// ── 床 ──
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(24, 24),
+  new THREE.MeshStandardMaterial({ color: 0x0d2119, roughness: 1 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.76;
+scene.add(floor);
+
+// ── 卓球台 ──
+const table = new THREE.Mesh(
+  new THREE.BoxGeometry(TABLE_HALF_X * 2, TABLE_THICK, TABLE_HALF_Z * 2),
+  new THREE.MeshStandardMaterial({ color: 0x1a6647, roughness: 0.75, metalness: 0.05 })
+);
+table.position.set(0, -TABLE_THICK / 2, 0);
+scene.add(table);
+
+// ── ライン ──
+const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+function line(w, d, x, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.002, d), lineMat);
+  m.position.set(x, 0.001, z);
+  scene.add(m);
+}
+line(TABLE_HALF_X * 2, 0.016, 0, TABLE_HALF_Z - 0.008);
+line(TABLE_HALF_X * 2, 0.016, 0, -TABLE_HALF_Z + 0.008);
+line(0.016, TABLE_HALF_Z * 2, TABLE_HALF_X - 0.008, 0);
+line(0.016, TABLE_HALF_Z * 2, -TABLE_HALF_X + 0.008, 0);
+line(0.012, TABLE_HALF_Z * 2, 0, 0);
+
+// ── 脚 ──
+const legMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.6 });
+[[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(s => {
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.72, 8), legMat);
+  leg.position.set(s[0] * (TABLE_HALF_X - 0.09), -0.40, s[1] * (TABLE_HALF_Z - 0.14));
+  scene.add(leg);
+});
+
+// ── ネット ──
+const net = new THREE.Mesh(
+  new THREE.BoxGeometry(NET_HALF_X * 2, NET_H, 0.008),
+  new THREE.MeshStandardMaterial({ color: 0xdfe8e4, transparent: true, opacity: 0.72, side: THREE.DoubleSide })
+);
+net.position.set(0, NET_H / 2, 0);
+scene.add(net);
+const netTop = new THREE.Mesh(
+  new THREE.BoxGeometry(NET_HALF_X * 2, 0.012, 0.012),
+  new THREE.MeshStandardMaterial({ color: 0xffffff })
+);
+netTop.position.set(0, NET_H, 0);
+scene.add(netTop);
+[-NET_HALF_X, NET_HALF_X].forEach(x => {
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, NET_H, 8), legMat);
+  post.position.set(x, NET_H / 2, 0);
+  scene.add(post);
+});
+
+// ── ボール ──
+const ball = new THREE.Mesh(
+  new THREE.SphereGeometry(BALL_R_VIEW, 18, 18),
+  new THREE.MeshStandardMaterial({ color: 0xfff7dc, roughness: 0.35, emissive: 0x332a10, emissiveIntensity: 0.5 })
+);
+scene.add(ball);
+
+// ── 影（奥行き把握の補助） ──
+const shadow = new THREE.Mesh(
+  new THREE.CircleGeometry(BALL_R_VIEW * 1.5, 16),
+  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 })
+);
+shadow.rotation.x = -Math.PI / 2;
+shadow.position.y = 0.003;
+scene.add(shadow);
+
+// ── ラケット ──
+function makePaddle(faceColor) {
+  const g = new THREE.Group();
+  const face = new THREE.Mesh(
+    new THREE.CylinderGeometry(PADDLE_R, PADDLE_R, 0.02, 26),
+    new THREE.MeshStandardMaterial({ color: faceColor, roughness: 0.45 })
+  );
+  face.rotation.x = Math.PI / 2;
+  g.add(face);
+  const edge = new THREE.Mesh(
+    new THREE.TorusGeometry(PADDLE_R, 0.006, 6, 26),
+    new THREE.MeshStandardMaterial({ color: 0x101010 })
+  );
+  g.add(edge);
+  const grip = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.019, 0.024, 0.10, 10),
+    new THREE.MeshStandardMaterial({ color: 0x6b452a, roughness: 0.8 })
+  );
+  grip.position.y = -(PADDLE_R + 0.045);
+  g.add(grip);
+  return g;
+}
+const pPaddle = makePaddle(0x3f9dff);
+const cPaddle = makePaddle(0xff5f4f);
+scene.add(pPaddle, cPaddle);
+
+// ═══════════════════════════════════════════
+//  ゲーム状態
+// ═══════════════════════════════════════════
+const G = {
+  phase: 'title',       // title | serve | rally | over
+  pScore: 0,
+  cScore: 0,
+  b: { x: 0, y: 0.3, z: 0, vx: 0, vy: 0, vz: 0 },
+  prevZ: 0,
+  playerX: 0,
+  cpuX: 0,
+  cpuTargetX: 0,
+  cpuReactTimer: 0,
+  cpuWillMiss: false,
+  lastHitter: null,     // 'player' | 'cpu'
+  bounceSide: null,     // 'player' | 'cpu'
+  rally: 0,
+  maxRally: 0,
+  totalRally: 0,
+  swings: 0,
+  hits: 0,
+  server: 'player',
+  serveTimer: 0
+};
+
+const el = {
+  p: document.getElementById('pScore'),
+  c: document.getElementById('cScore'),
+  rally: document.getElementById('rallyView'),
+  serveMsg: document.getElementById('serveMsg'),
+  title: document.getElementById('titleScreen'),
+  result: document.getElementById('resultScreen'),
+  resultTitle: document.getElementById('resultTitle'),
+  bigScore: document.getElementById('bigScore'),
+  stMax: document.getElementById('stMaxRally'),
+  stTotal: document.getElementById('stTotalRally'),
+  stAcc: document.getElementById('stAccuracy')
+};
+
+function pop(node) {
+  node.classList.add('pop');
+  setTimeout(() => node.classList.remove('pop'), 140);
+}
+function syncScore(which) {
+  el.p.textContent = G.pScore;
+  el.c.textContent = G.cScore;
+  if (which === 'player') pop(el.p);
+  if (which === 'cpu') pop(el.c);
+}
+
+// ═══════════════════════════════════════════
+//  弾道計算：指定した着弾点に落ちる vy を逆算する
+//  （これによりラリーが安定して続く）
+// ═══════════════════════════════════════════
+function launch(fromY, fromZ, toZ, targetBounceZ, speedZ, vx) {
+  const dirZ = (toZ - fromZ) > 0 ? 1 : -1;
+  const distToBounce = Math.abs(targetBounceZ - fromZ);
+  const t = distToBounce / speedZ;
+  const vy = (BALL_R - fromY + 0.5 * Math.abs(GRAVITY) * t * t) / t;
+  return { vy: vy, vz: dirZ * speedZ, vx: vx };
+}
+
+function rallySpeed() {
+  return Math.min(2.45 + G.rally * 0.055, 4.1);
+}
+
+// ═══════════════════════════════════════════
+//  サーブ
+// ═══════════════════════════════════════════
+function startServe(server) {
+  G.server = server;
+  G.phase = 'serve';
+  G.serveTimer = SERVE_WAIT;
+  G.rally = 0;
+  G.bounceSide = null;
+  G.lastHitter = null;
+  G.cpuWillMiss = false;
+
+  const b = G.b;
+  if (server === 'player') {
+    b.x = G.playerX * 0.5; b.y = 0.34; b.z = PLAYER_Z - 0.18;
+  } else {
+    b.x = G.cpuX * 0.5;    b.y = 0.34; b.z = CPU_Z + 0.18;
+  }
+  b.vx = 0; b.vy = 0; b.vz = 0;
+  G.prevZ = b.z;
+  el.serveMsg.textContent = server === 'player' ? 'あなたのサーブ' : 'CPUのサーブ';
+}
+
+function executeServe() {
+  const b = G.b;
+  const server = G.server;
+  const toZ = server === 'player' ? CPU_Z : PLAYER_Z;
+  const bounceZ = (server === 'player' ? -1 : 1) * (0.45 + Math.random() * 0.35);
+  const vx = (Math.random() - 0.5) * 0.30;
+  const r = launch(b.y, b.z, toZ, bounceZ, 2.45, vx);
+  b.vx = r.vx; b.vy = r.vy; b.vz = r.vz;
+  G.lastHitter = server;
+  G.bounceSide = null;
+  G.phase = 'rally';
+  el.serveMsg.textContent = '';
+}
+
+// ═══════════════════════════════════════════
+//  打球処理
+// ═══════════════════════════════════════════
+function hitBy(who, dx) {
+  const b = G.b;
+  G.rally++;
+  G.totalRally++;
+  if (G.rally > G.maxRally) G.maxRally = G.rally;
+
+  const spd = rallySpeed();
+  const toZ = who === 'player' ? CPU_Z : PLAYER_Z;
+  // 狙う着弾点：ラケットのどこに当たったかで左右にブレる
+  const sideSign = who === 'player' ? -1 : 1;
+  const bounceZ = sideSign * (0.45 + Math.random() * 0.45);
+  const vx = dx * 3.4 + (who === 'cpu' ? (Math.random() - 0.5) * 0.22 : 0);
+
+  const r = launch(b.y, b.z, toZ, bounceZ, spd, THREE.MathUtils.clamp(vx, -0.9, 0.9));
+  b.vx = r.vx; b.vy = r.vy; b.vz = r.vz;
+
+  // 面をわずかに越えた位置に押し出して二重ヒットを防ぐ
+  b.z += r.vz > 0 ? 0.02 : -0.02;
+
+  G.lastHitter = who;
+  G.bounceSide = null;
+
+  if (who === 'player') {
+    G.hits++;
+    // CPU の次の挙動を決める
+    G.cpuReactTimer = CPU_DELAY;
+    let missRate = CPU_MISS;
+    const diff = G.pScore - G.cScore;
+    if (diff >= 4) missRate -= 0.04;
+    if (diff <= -4) missRate += 0.06;
+    G.cpuWillMiss = Math.random() < Math.max(0.01, missRate);
+  }
+  el.rally.textContent = G.rally >= 3 ? 'RALLY ' + G.rally : '';
+}
+
+// ═══════════════════════════════════════════
+//  得点処理
+// ═══════════════════════════════════════════
+function score(who) {
+  if (who === 'player') G.pScore++; else G.cScore++;
+  syncScore(who);
+  el.rally.textContent = '';
+
+  if (G.pScore >= WIN_SCORE || G.cScore >= WIN_SCORE) {
+    finish();
+  } else {
+    startServe(who);   // 得点した側が次のサーブ
+  }
+}
+
+function finish() {
+  G.phase = 'over';
+  const win = G.pScore >= WIN_SCORE;
+  el.resultTitle.textContent = win ? 'WIN!' : 'LOSE';
+  el.resultTitle.style.color = win ? '#ffd54a' : '#ff8a7d';
+  el.bigScore.textContent = G.pScore + ' - ' + G.cScore;
+  el.stMax.textContent = G.maxRally;
+  el.stTotal.textContent = G.totalRally;
+  const acc = G.swings > 0 ? Math.round(G.hits / G.swings * 100) : 0;
+  el.stAcc.textContent = acc + '%';
+  el.result.classList.remove('hidden');
+}
+
+// ═══════════════════════════════════════════
+//  入力（第5.1章：ドラッグでX追従）
+// ═══════════════════════════════════════════
+function setPlayerX(clientX) {
+  const ratio = clientX / window.innerWidth;
+  G.playerX = THREE.MathUtils.clamp((ratio - 0.5) * 2.05 * PADDLE_X_LIM, -PADDLE_X_LIM, PADDLE_X_LIM);
+}
+canvas.addEventListener('touchstart', e => setPlayerX(e.touches[0].clientX), { passive: true });
+canvas.addEventListener('touchmove',  e => setPlayerX(e.touches[0].clientX), { passive: true });
+canvas.addEventListener('mousemove',  e => setPlayerX(e.clientX));
+
+// ═══════════════════════════════════════════
+//  更新
+// ═══════════════════════════════════════════
+function update(dt) {
+  const b = G.b;
+
+  if (G.phase === 'serve') {
+    // サーブ待機中はラケット位置にボールを追従
+    if (G.server === 'player') b.x = G.playerX * 0.5;
+    else b.x = G.cpuX * 0.5;
+    G.serveTimer -= dt;
+    if (G.serveTimer <= 0) executeServe();
+    G.prevZ = b.z;
+    updateCPU(dt);
+    return;
+  }
+  if (G.phase !== 'rally') { updateCPU(dt); return; }
+
+  G.prevZ = b.z;
+
+  // ── 物理積分 ──
+  b.vy += GRAVITY * dt;
+  b.vx *= AIR_DRAG;
+  b.vz *= AIR_DRAG;
+  b.x += b.vx * dt;
+  b.y += b.vy * dt;
+  b.z += b.vz * dt;
+
+  // ── 台のバウンド ──
+  if (b.y - BALL_R <= 0 && b.vy < 0 &&
+      Math.abs(b.x) <= TABLE_HALF_X && Math.abs(b.z) <= TABLE_HALF_Z) {
+    b.y = BALL_R;
+    b.vy = -b.vy * REST_TABLE;
+    G.bounceSide = b.z > 0 ? 'player' : 'cpu';
+  }
+
+  // ── ネット衝突（第4.3章） ──
+  if (Math.abs(b.z) < 0.025 && b.y < NET_H + BALL_R && Math.abs(b.x) < NET_HALF_X) {
+    b.vz *= -0.25;
+    b.vy = Math.max(b.vy, 0.1);
+    b.z += b.vz > 0 ? 0.03 : -0.03;
+  }
+
+  // ── ラケット判定（第4.4章：連続衝突判定） ──
+  checkPaddle('player', PLAYER_Z, G.playerX, 1);
+  checkPaddle('cpu',    CPU_Z,    G.cpuX,   -1);
+
+  updateCPU(dt);
+  checkScore();
+}
+
+// dirSign: そのラケット面を「外向き」に通過する vz の符号
+function checkPaddle(who, planeZ, paddleX, dirSign) {
+  const b = G.b;
+  const crossed = dirSign > 0
+    ? (G.prevZ < planeZ && b.z >= planeZ)
+    : (G.prevZ > planeZ && b.z <= planeZ);
+  if (!crossed) return;
+  if (G.lastHitter === who) return;   // 自分が打った球は自分では取れない
+
+  // 通過時点を線形補間
+  const t = (planeZ - G.prevZ) / (b.z - G.prevZ);
+  const hx = b.x - b.vx * (1 - t) * 0;   // vx は微小なので近似
+  const hitX = b.x;
+  const hitY = b.y;
+
+  if (who === 'player') G.swings++;
+
+  const dx = hitX - paddleX;
+  const dy = hitY - PADDLE_Y;
+
+  if (Math.abs(dx) <= HIT_R_X && Math.abs(dy) <= HIT_R_Y) {
+    // CPU が「ミスする」判定なら空振りさせる
+    if (who === 'cpu' && G.cpuWillMiss) return;
+    b.z = planeZ;
+    hitBy(who, dx);
+  }
+}
+
+function updateCPU(dt) {
+  const b = G.b;
+  // 反応遅延
+  if (G.cpuReactTimer > 0) {
+    G.cpuReactTimer -= dt;
+  } else if (b.vz < 0 && G.phase === 'rally') {
+    // 到達予測（回転がないので x は線形）
+    const tArrive = (CPU_Z - b.z) / b.vz;
+    if (tArrive > 0) {
+      let px = b.x + b.vx * tArrive;
+      px += (Math.random() - 0.5) * CPU_ERROR * dt * 12;
+      if (G.cpuWillMiss) px += (px >= 0 ? -1 : 1) * 0.45;
+      G.cpuTargetX = THREE.MathUtils.clamp(px, -PADDLE_X_LIM, PADDLE_X_LIM);
+    }
+  } else if (G.phase === 'serve' && G.server === 'cpu') {
+    G.cpuTargetX = 0;
+  }
+
+  const d = G.cpuTargetX - G.cpuX;
+  const step = CPU_SPEED * dt;
+  if (Math.abs(d) <= step) G.cpuX = G.cpuTargetX;
+  else G.cpuX += Math.sign(d) * step;
+}
+
+function checkScore() {
+  const b = G.b;
+
+  // 自分側のラケット面を大きく通過 → 取れなかった
+  if (b.z > PLAYER_Z + 0.35) {
+    // CPU の返球が自分のコートでバウンドしていれば正当な得点
+    if (G.bounceSide === 'player') score('cpu');
+    else score('player');    // CPU のオーバーミス
+    return;
+  }
+  if (b.z < CPU_Z - 0.35) {
+    if (G.bounceSide === 'cpu') score('player');
+    else score('cpu');       // 自分のオーバーミス
+    return;
+  }
+  // 台から落下
+  if (b.y < -0.45) {
+    if (G.bounceSide === 'player')      score('cpu');
+    else if (G.bounceSide === 'cpu')    score('player');
+    else score(G.lastHitter === 'player' ? 'cpu' : 'player'); // ネットミス等
+  }
+}
+
+// ═══════════════════════════════════════════
+//  描画同期
+// ═══════════════════════════════════════════
+function sync(dt) {
+  const b = G.b;
+  ball.position.set(b.x, b.y, b.z);
+
+  // 影：台の上にあるときだけ表示
+  const onTable = Math.abs(b.x) <= TABLE_HALF_X && Math.abs(b.z) <= TABLE_HALF_Z;
+  shadow.visible = onTable && b.y > 0;
+  if (shadow.visible) {
+    shadow.position.set(b.x, 0.003, b.z);
+    const s = THREE.MathUtils.clamp(1 - b.y * 0.9, 0.35, 1);
+    shadow.scale.set(s, s, s);
+    shadow.material.opacity = 0.32 * s;
+  }
+
+  pPaddle.position.set(G.playerX, PADDLE_Y, PLAYER_Z);
+  cPaddle.position.set(G.cpuX, PADDLE_Y, CPU_Z);
+  cPaddle.rotation.y = Math.PI;
+
+  // ラケットを進行方向へわずかに傾ける（手触りの補助）
+  pPaddle.rotation.z = THREE.MathUtils.lerp(pPaddle.rotation.z, 0, 0.2);
+
+  // カメラ追従（第3.3章：playerX の 0.25 倍 / lerp 0.1）
+  const targetCamX = G.playerX * 0.25;
+  camera.position.x += (targetCamX - camera.position.x) * 0.1;
+  camLook.x = G.playerX * 0.12;
+  camera.lookAt(camLook);
+}
+
+// ═══════════════════════════════════════════
+//  ループ
+// ═══════════════════════════════════════════
+const clock = new THREE.Clock();
+function loop() {
+  const dt = Math.min(clock.getDelta(), 0.033);   // 第12章：上限を設ける
+  if (G.phase === 'serve' || G.phase === 'rally') update(dt);
+  sync(dt);
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+
+// ═══════════════════════════════════════════
+//  画面制御
+// ═══════════════════════════════════════════
+function newGame() {
+  G.pScore = 0; G.cScore = 0;
+  G.maxRally = 0; G.totalRally = 0;
+  G.swings = 0; G.hits = 0;
+  G.cpuX = 0; G.cpuTargetX = 0;
+  syncScore(null);
+  el.rally.textContent = '';
+  startServe('player');
+  clock.getDelta();
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  el.title.classList.add('hidden');
+  newGame();
+});
+document.getElementById('againBtn').addEventListener('click', () => {
+  el.result.classList.add('hidden');
+  newGame();
+});
+document.getElementById('toTitleBtn').addEventListener('click', () => {
+  el.result.classList.add('hidden');
+  el.title.classList.remove('hidden');
+  G.phase = 'title';
+});
+
+sync(0);
+renderer.render(scene, camera);
+loop();
+
+})();
+</script>
+</body>
+</html>
