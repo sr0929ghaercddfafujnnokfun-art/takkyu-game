@@ -46,6 +46,27 @@
   }
   #shotFx.show { opacity: 1; transform: scale(1); }
 
+  #spinBar {
+    position: absolute; left: 0; right: 0;
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 74px);
+    z-index: 7; text-align: center; pointer-events: none;
+  }
+  #spinBar.hidden { display: none; }
+  .spinLabel {
+    font-size: 9px; letter-spacing: .14em; color: #cfe9dd; opacity: .65; margin-bottom: 5px;
+  }
+  .spinRow { display: flex; gap: 6px; justify-content: center; pointer-events: auto; }
+  .spinBtn {
+    min-width: 62px; padding: 7px 6px; border-radius: 12px;
+    border: 1.5px solid rgba(255,255,255,.22); background: rgba(10,30,22,.8);
+    color: #eafff2; font-size: 10px; font-weight: 700; line-height: 1.3;
+    backdrop-filter: blur(4px);
+  }
+  .spinBtn .si { display: block; font-size: 15px; margin-bottom: 1px; }
+  .spinBtn .sk { display: block; font-size: 8px; opacity: .45; }
+  .spinBtn.on { background: #ffd54a; color: #2b2205; border-color: #ffd54a; }
+  .spinBtn:active { transform: scale(.95); }
+
   #bottomBar {
     position: absolute; left: 0; right: 0; bottom: max(12px, env(safe-area-inset-bottom));
     padding: 0 14px; z-index: 6;
@@ -142,6 +163,11 @@
   <div class="phaseTag">PHASE 3 — 特殊能力 / 演出 / 難易度</div>
   <div id="shotFx"></div>
 
+  <div id="spinBar" class="hidden">
+    <div class="spinLabel">サーブの回転</div>
+    <div class="spinRow" id="spinRow"></div>
+  </div>
+
   <div id="bottomBar">
     <div id="gaugeWrap">
       <div id="gaugeLabel">COMBO GAUGE</div>
@@ -160,6 +186,7 @@
     <h2>PHASE 3</h2>
     <div class="howto">
       <div class="row"><span class="k">サーブ</span><span><b>自分のコート→相手のコート</b>の順にタップ</span></div>
+      <div class="row"><span class="k">サーブの回転</span><span>下のボタン or キー <b>1〜4</b> で選ぶ</span></div>
       <div class="row"><span class="k">動かす</span><span>指で上下左右になぞる（高さも変わる）</span></div>
       <div class="row"><span class="k">擦り上げる</span><span><b>ドライブ</b> / 素早く上へ<b>スマッシュ</b></span></div>
       <div class="row"><span class="k">切り下ろす</span><span><b>カット</b>（浮いて失速）</span></div>
@@ -235,6 +262,21 @@ const GAUGE_NORMAL = 12, GAUGE_PERFECT = 25, STOCK_MAX = 3;
 const SLOW_SCALE = 0.4, SLOW_DURATION = 2.5, POWER_MULT = 2.0;
 const STOP_SPEED = 1.55, STOP_DEPTH_MIN = 0.14, STOP_DEPTH_MAX = 0.32;
 const STOP_SPIN = -0.5, STOP_BOUNCE_KILL = 0.42;
+
+// サーブの回転プリセット
+const SERVE_SPINS = [
+  { key:'none', label:'ナックル', ico:'○', sx:0,     side:false, mag:0,    col:'#dfe8e4' },
+  { key:'top',  label:'ドライブ', ico:'↑', sx:0.85,  side:false, mag:0,    col:'#3dff9a' },
+  { key:'back', label:'カット',   ico:'↓', sx:-0.85, side:false, mag:0,    col:'#4fb6ff' },
+  { key:'side', label:'サイド',   ico:'↔', sx:0,     side:true,  mag:0.62, col:'#c76bff' }
+];
+function cpuServeSpin(){
+  const r = Math.random();
+  if (r < 0.40) return SERVE_SPINS[0];
+  if (r < 0.65) return SERVE_SPINS[1];
+  if (r < 0.90) return SERVE_SPINS[2];
+  return SERVE_SPINS[3];
+}
 
 const HOLE_R = 0.18, HOLE_DURATION = 6.0;
 const MAX_BALLS = 2, MULTI_ANGLE = 15 * Math.PI / 180;
@@ -448,6 +490,7 @@ const G = {
   rally: 0, maxRally: 0, totalRally: 0,
   smashCount: 0, perfectCount: 0, abilityCount: 0, holeCount: 0,
   server: 'player', serveTimer: 0, serveStep: 0, serveP1: null, serveP2: null,
+  serveSpin: 0,
   gauge: 0, stock: { slow:0, power:0, hole:0, multi:0 },
   slowTimer: 0, powerNext: false, timeScale: 1,
   hole: null, awaitHole: false,
@@ -474,6 +517,23 @@ const abilCnt = {
   slow: document.getElementById('cntSlow'), power: document.getElementById('cntPower'),
   hole: document.getElementById('cntHole'), multi: document.getElementById('cntMulti')
 };
+
+// ── サーブ回転の選択UI ──
+const spinBar = document.getElementById('spinBar');
+const spinRow = document.getElementById('spinRow');
+SERVE_SPINS.forEach((sp, i) => {
+  const b = document.createElement('button');
+  b.className = 'spinBtn' + (i===0 ? ' on' : '');
+  b.innerHTML = '<span class="si" style="color:'+sp.col+'">'+sp.ico+'</span>'+sp.label+
+                '<span class="sk">'+(i+1)+'</span>';
+  b.addEventListener('click', () => setServeSpin(i));
+  spinRow.appendChild(b);
+});
+function setServeSpin(i){
+  G.serveSpin = i;
+  Array.from(spinRow.children).forEach((b,k)=>b.classList.toggle('on', k===i));
+}
+function showSpinBar(on){ spinBar.classList.toggle('hidden', !on); }
 
 function pop(n){ n.classList.add('pop'); setTimeout(()=>n.classList.remove('pop'),140); }
 function syncScore(w){
@@ -608,37 +668,43 @@ function startServe(server) {
   if (server==='player'){
     G.serveStep=1; G.serveTimer=12;
     el.serveMsg.textContent='① 自分のコートをタップ';
+    showSpinBar(true);
   } else {
     G.serveStep=0; G.serveTimer=SERVE_WAIT;
     el.serveMsg.textContent='CPUのサーブ';
+    showSpinBar(false);
   }
 }
 // ゲームループと同じ物理でサーブ弾道を実際に飛ばしてみる
-function simServe(x0, y0, z0, vx, vy0, vz, sy){
-  const g = Math.abs(GRAVITY), dt = 1/240;
-  let x=x0, y=y0, z=z0, vyy=vy0, vxx=vx;
-  let b1=null, b2=null, net=false;
-  for (let i=0;i<3000;i++){
+function simServe(x0, y0, z0, vx, vy0, vz, sx, sy){
+  const g = Math.abs(GRAVITY), dt = 1/180;
+  let x=x0, y=y0, z=z0, vyy=vy0, vxx=vx, vzz=vz;
+  let b1=null, b2=null, net=false, bounced=0;
+  for (let i=0;i<2400;i++){
     const pz=z;
-    vyy += -g*dt; vxx += MAGNUS_X*sy*dt;
-    x += vxx*dt; y += vyy*dt; z += vz*dt;
+    vyy += (GRAVITY - MAGNUS_Y*sx)*dt;      // 上下回転は実効重力として効く
+    vxx += MAGNUS_X*sy*dt;                  // 横回転は横方向の加速度
+    x += vxx*dt; y += vyy*dt; z += vzz*dt;
     if ((pz>0.02 && z<=0.02) || (pz<-0.02 && z>=-0.02)){
       if (y < NET_H + BALL_R + 0.015){ net=true; break; }
     }
     if (y-BALL_R<=0 && vyy<0 && Math.abs(x)<=TABLE_HALF_X && Math.abs(z)<=TABLE_HALF_Z){
       y=BALL_R; vyy=-vyy*REST_TABLE;
+      if (sx>0) vzz *= 1+0.15*sx;           // 上回転は前に伸びる
+      else if (sx<0) vzz *= 1-0.28*(-sx);   // 下回転は失速する
+      bounced++;
       if (b1===null) b1=z; else { b2=z; break; }
     }
     if (y < -0.5 || Math.abs(z) > 2.4) break;
   }
-  return { b1:b1, b2:b2, net:net };
+  return { b1:b1, b2:b2, net:net, x2:x };
 }
 
 // 1バウンド目を z1 に落とすための初速（垂直成分）
-function serveVy(y0, dzA, vz){
-  const g = Math.abs(GRAVITY);
+function serveVy(y0, dzA, vz, sx){
+  const gEff = Math.abs(GRAVITY) + MAGNUS_Y*sx;   // 回転を実効重力として織り込む
   const tA = dzA / vz;
-  return { vy: (BALL_R - y0 + 0.5*g*tA*tA)/tA, tA: tA };
+  return { vy: (BALL_R - y0 + 0.5*gEff*tA*tA)/tA, tA: tA, gEff: gEff };
 }
 
 function serveFromPoints(server, p1, p2){
@@ -664,58 +730,107 @@ function serveFromPoints(server, p1, p2){
     ? THREE.MathUtils.clamp(p2.z, -(TABLE_HALF_Z-0.10), -0.14)
     : THREE.MathUtils.clamp(p2.z,  0.14, TABLE_HALF_Z-0.10);
 
-  // 実際に飛ばして、2バウンド目が狙いに最も近くなる球速を二分探索する
+  // ── 選択された回転 ──
+  const spin = server==='player' ? SERVE_SPINS[G.serveSpin] : cpuServeSpin();
+  const sxS = spin.sx;
+  // 横回転の向きは1バウンド目のタップ位置で決める
+  const syS = spin.side ? (p1.x >= 0 ? spin.mag : -spin.mag) : 0;
+
+  // 球速を走査し、有効な解の中から狙いに最も近いものを選ぶ
+  // 有効＝2バウンド目が「相手コート内」に収まり、ネットにも当たらないこと
+  const oppSide = -sign;
+  let syUse = syS;
+  function validServe(y0, vz, sy){
+    const sv = serveVy(y0, dzA, vz, sxS);
+    const r  = simServe(x0, y0, z0, 0, sv.vy, -sign*vz, sxS, sy);
+    if (r.b2===null || r.net) return null;
+    if (Math.sign(r.b2) !== oppSide) return null;              // 自陣に落ちたら無効
+    if (Math.abs(r.b2) > TABLE_HALF_Z - 0.04) return null;     // 台外も無効
+    return { vz:vz, vy:sv.vy, tA:sv.tA, gEff:sv.gEff, r:r };
+  }
+
   let best = null, y0 = 0;
-  for (let iter=0; iter<4; iter++){
-    y0 = THREE.MathUtils.clamp(padY + 0.16 + iter*0.06, 0.30, 0.66);
-    let lo=1.25, hi=4.3, cand=null;
-    for (let k=0;k<26;k++){
-      const mid=(lo+hi)/2;
-      const sv=serveVy(y0, dzA, mid);
-      const r=simServe(x0, y0, z0, 0, sv.vy, -sign*mid, 0);
-      const depth = r.b2===null ? 99 : Math.abs(r.b2 - z1);
-      const want  = Math.abs(wantZ2 - z1);
-      if (depth < want) lo=mid; else hi=mid;                  // 速いほど遠くへ飛ぶ
-      if (r.b2!==null && !r.net) cand={vz:mid, vy:sv.vy, tA:sv.tA, r:r, y0:y0};
+  // 横回転は強すぎると台の横に流れるため、回転量も段階的に弱めて探す
+  const spinScales = spin.side ? [1, 0.75, 0.55, 0.35, 0.2, 0] : [1];
+  for (const ss of spinScales){
+    const sy = syS * ss;
+    for (let iter=0; iter<4 && !best; iter++){
+      y0 = THREE.MathUtils.clamp(padY + 0.16 + iter*0.06, 0.30, 0.66);
+      let bestErr = 1e9, coarse = null;
+      for (let k=0; k<=28; k++){
+        const vz = 1.30 + (4.35-1.30)*k/28;
+        const c = validServe(y0, vz, sy);
+        if (!c) continue;
+        const err = Math.abs(c.r.b2 - wantZ2);
+        if (err < bestErr){ bestErr = err; coarse = c; }
+      }
+      if (!coarse) continue;
+      const step = (4.35-1.30)/28;
+      for (let k=-4; k<=4; k++){
+        const vz = coarse.vz + step*k/4;
+        if (vz < 1.25 || vz > 4.4) continue;
+        const c = validServe(y0, vz, sy);
+        if (!c) continue;
+        const err = Math.abs(c.r.b2 - wantZ2);
+        if (err < bestErr){ bestErr = err; coarse = c; }
+      }
+      best = coarse; best.y0 = y0;
     }
-    if (cand){ best=cand; break; }
+    if (best){ syUse = sy; break; }
   }
   if (!best){
-    y0 = THREE.MathUtils.clamp(padY + 0.16, 0.30, 0.66);
-    const sv=serveVy(y0, dzA, 1.9);
-    best = { vz:1.9, vy:sv.vy, tA:sv.tA, r:simServe(x0,y0,z0,0,sv.vy,-sign*1.9,0), y0:y0 };
+    y0 = THREE.MathUtils.clamp(padY + 0.22, 0.30, 0.66);
+    const sv = serveVy(y0, dzA, 2.4, sxS);
+    syUse = 0;
+    best = { vz:2.4, vy:sv.vy, tA:sv.tA, gEff:sv.gEff,
+             r:simServe(x0,y0,z0,0,sv.vy,-sign*2.4,sxS,0), y0:y0 };
   }
   y0 = best.y0;
 
   const tA = best.tA;
-  const vyAfter = REST_TABLE*(Math.abs(GRAVITY)*tA - best.vy);
-  const tB = 2*vyAfter/Math.abs(GRAVITY);
+  const vyAfter = REST_TABLE*(best.gEff*tA - best.vy);
+  const tB = 2*vyAfter/best.gEff;
 
-  // 横方向：2点のXを通るよう初速と横回転を同時に解く
-  const t1 = tA, t2 = tA + tB;
-  const lim = TABLE_HALF_X - 0.08;
-  const X1 = THREE.MathUtils.clamp(p1.x, -lim, lim) - x0;
-  const X2 = THREE.MathUtils.clamp(p2.x, -lim, lim) - x0;
-  let ax0 = 0;
-  if (t1 > 0.02 && t2 > t1 + 0.02){
-    ax0 = 2*(X2 - X1*t2/t1) / (t2*(t2 - t1));
-    ax0 = THREE.MathUtils.clamp(ax0, -MAGNUS_X, MAGNUS_X);
-  }
-  const vx0 = THREE.MathUtils.clamp((X1 - 0.5*ax0*t1*t1)/t1, -VX_LIMIT, VX_LIMIT);
-
-  // 横に振りすぎて台から外れないか検証し、外れるなら狙いを弱める
   let vx = 0, ax = 0, sim = null;
-  for (const scale of [1, 0.75, 0.5, 0.3, 0.15, 0]){
-    const tvx = vx0*scale, tax = ax0*scale;
-    const r = simServe(x0, y0, z0, tvx, best.vy, -sign*best.vz, tax/MAGNUS_X);
-    if (r.b1!==null && r.b2!==null && !r.net){ vx=tvx; ax=tax; sim=r; break; }
+  if (spin.side){
+    // 横回転：曲がりを見込んで2バウンド目のXを狙う。台から外れるなら回転を弱める
+    const lim = TABLE_HALF_X - 0.14;
+    const t2s = tA + tB;
+    const X2 = THREE.MathUtils.clamp(p2.x, -lim, lim) - x0;
+    let done = false;
+    for (const sc of [1, 0.75, 0.55, 0.35, 0.2, 0]){
+      const sy2 = syUse * sc;
+      const ax2 = MAGNUS_X * sy2;
+      const tvx = THREE.MathUtils.clamp((X2 - 0.5*ax2*t2s*t2s)/t2s, -VX_LIMIT, VX_LIMIT);
+      const r = simServe(x0, y0, z0, tvx, best.vy, -sign*best.vz, sxS, sy2);
+      if (r.b1!==null && r.b2!==null && !r.net){ vx=tvx; ax=ax2; sim=r; done=true; break; }
+    }
+    if (!done){ ax = 0; vx = 0; sim = simServe(x0,y0,z0,0,best.vy,-sign*best.vz,sxS,0); }
+  } else {
+    // それ以外：2点のXを通るよう初速と横回転を連立で解く
+    const t1 = tA, t2 = tA + tB;
+    const lim = TABLE_HALF_X - 0.08;
+    const X1 = THREE.MathUtils.clamp(p1.x, -lim, lim) - x0;
+    const X2 = THREE.MathUtils.clamp(p2.x, -lim, lim) - x0;
+    let ax0 = 0;
+    if (t1 > 0.02 && t2 > t1 + 0.02){
+      ax0 = 2*(X2 - X1*t2/t1) / (t2*(t2 - t1));
+      ax0 = THREE.MathUtils.clamp(ax0, -MAGNUS_X*0.22, MAGNUS_X*0.22);
+    }
+    const vx0 = THREE.MathUtils.clamp((X1 - 0.5*ax0*t1*t1)/t1, -VX_LIMIT, VX_LIMIT);
+    for (const scale of [1, 0.75, 0.5, 0.3, 0.15, 0]){
+      const tvx = vx0*scale, tax = ax0*scale;
+      const r = simServe(x0, y0, z0, tvx, best.vy, -sign*best.vz, sxS, tax/MAGNUS_X);
+      if (r.b1!==null && r.b2!==null && !r.net){ vx=tvx; ax=tax; sim=r; break; }
+    }
   }
-  if (!sim){ sim = simServe(x0, y0, z0, 0, best.vy, -sign*best.vz, 0); }
+  if (!sim){ ax = spin.side ? MAGNUS_X*syUse : 0; vx = 0;
+             sim = simServe(x0, y0, z0, 0, best.vy, -sign*best.vz, sxS, ax/MAGNUS_X); }
   best.r = sim;
 
   b.x=x0; b.y=y0; b.z=z0; b.prevZ=z0;
   b.vx=vx; b.vy=best.vy; b.vz=-sign*best.vz;
-  b.sx=0; b.sy=ax/MAGNUS_X;
+  b.sx=sxS; b.sy=ax/MAGNUS_X;
   b.stopShot=false; b.serveArc=true; b.stall=0;
   b.lastHitter=server; b.bounceSide=null; b.bounceCount=0; b.throughHole=null;
 
@@ -723,12 +838,14 @@ function serveFromPoints(server, p1, p2){
   if (server==='player'){
     marker1.position.set(THREE.MathUtils.clamp(p1.x,-TABLE_HALF_X+.06,TABLE_HALF_X-.06), .005, z1);
     marker1.visible=true;
-    marker2.position.set(THREE.MathUtils.clamp(p2.x,-TABLE_HALF_X+.06,TABLE_HALF_X-.06), .005, z2actual);
+    const mx2 = best.r && best.r.x2!==undefined ? best.r.x2 : p2.x;
+    marker2.position.set(THREE.MathUtils.clamp(mx2,-TABLE_HALF_X+.06,TABLE_HALF_X-.06), .005, z2actual);
     marker2.visible=true;
   }
   G.incomingBounceZ = server==='player' ? z2actual : -0.6;
   G.serveStep=0; G.phase='rally';
   el.serveMsg.textContent='';
+  showSpinBar(false);
   beep(560,.05,'square',.04);
 }
 
@@ -896,6 +1013,10 @@ abilBtn.multi.addEventListener('click', useMulti);
 window.addEventListener('keydown', e=>{
   if (e.repeat) return;
   const k = e.key.toLowerCase();
+  if (k>='1' && k<='4'){
+    if (G.phase==='serve' && G.server==='player') setServeSpin(+k - 1);
+    return;
+  }
   if (k==='a') useSlow();
   else if (k==='s') usePower();
   else if (k==='d') useHole();
@@ -940,6 +1061,7 @@ function finish(){
   el.stSmash.textContent=G.smashCount; el.stPerfect.textContent=G.perfectCount;
   el.stAbility.textContent=G.abilityCount; el.stHole.textContent=G.holeCount;
   el.result.classList.remove('hidden');
+  showSpinBar(false);
   clearBalls();
 }
 
@@ -952,7 +1074,7 @@ function setPaddle(cx,cy){
   const t=THREE.MathUtils.clamp((ry-Y_BAND_TOP)/Y_BAND_SIZE,0,1);
   G.playerY=THREE.MathUtils.lerp(PADDLE_Y_MAX,PADDLE_Y_MIN,t);
 }
-function isUI(t){ return t && t.closest && t.closest('#abilityBar, .screen, .btn, #muteBtn'); }
+function isUI(t){ return t && t.closest && t.closest('#abilityBar, #spinBar, .screen, .btn, #muteBtn'); }
 
 const rayc = new THREE.Raycaster();
 const tablePlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
