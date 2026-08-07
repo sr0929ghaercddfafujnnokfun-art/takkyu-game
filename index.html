@@ -3,124 +3,175 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>卓球ゲーム - Phase 1</title>
+<title>卓球ゲーム - Phase 3</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
   html, body {
-    height: 100%; width: 100%; overflow: hidden;
-    position: fixed;
-    overscroll-behavior: none;
-    background: #0a1410;
+    height: 100%; width: 100%; overflow: hidden; position: fixed;
+    overscroll-behavior: none; background: #0a1410;
     font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
-    touch-action: none;
-    user-select: none; -webkit-user-select: none;
+    touch-action: none; user-select: none; -webkit-user-select: none;
   }
   #app { position: relative; width: 100%; height: 100%; }
-  canvas {
-    display: block;
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    touch-action: none;
-  }
+  canvas { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; touch-action: none; }
 
-  /* ---- HUD ---- */
   #hud {
     position: absolute; top: 0; left: 0; right: 0;
     display: flex; justify-content: space-between; align-items: flex-start;
-    padding: max(12px, env(safe-area-inset-top)) 18px 0;
-    z-index: 5; pointer-events: none;
-    color: #e8fff4;
+    padding: max(10px, env(safe-area-inset-top)) 16px 0;
+    z-index: 5; pointer-events: none; color: #e8fff4;
   }
-  .scoreBox { text-align: center; min-width: 64px; }
-  .scoreLabel { font-size: 11px; letter-spacing: .12em; opacity: .7; margin-bottom: 2px; }
-  .scoreVal {
-    font-size: 34px; font-weight: 800; line-height: 1;
-    font-variant-numeric: tabular-nums;
-    transition: transform .12s ease-out;
-  }
+  .scoreBox { text-align: center; min-width: 58px; }
+  .scoreLabel { font-size: 10px; letter-spacing: .12em; opacity: .7; }
+  .scoreVal { font-size: 31px; font-weight: 800; line-height: 1.1;
+    font-variant-numeric: tabular-nums; transition: transform .12s ease-out; }
   .scoreVal.pop { transform: scale(1.35); }
-  #pScore { color: #6fc2ff; }
-  #cScore { color: #ff8a7d; }
-  #centerHud { text-align: center; padding-top: 6px; }
-  #rallyView { font-size: 12px; opacity: .6; letter-spacing: .1em; }
-  #serveMsg {
-    font-size: 13px; font-weight: 700; margin-top: 4px;
-    color: #ffd54a; min-height: 18px;
+  #pScore { color: #6fc2ff; } #cScore { color: #ff8a7d; }
+  #centerHud { text-align: center; padding-top: 3px; }
+  #rallyView { font-size: 11px; opacity: .6; letter-spacing: .1em; }
+  #serveMsg { font-size: 12px; font-weight: 700; color: #ffd54a; min-height: 16px; }
+  #muteBtn {
+    position: absolute; top: max(10px, env(safe-area-inset-top)); right: 14px;
+    z-index: 7; pointer-events: auto;
+    background: rgba(255,255,255,.12); border: none; color: #eafff2;
+    width: 30px; height: 30px; border-radius: 15px; font-size: 13px;
   }
 
-  /* ---- overlays ---- */
+  #shotFx {
+    position: absolute; top: 32%; left: 0; right: 0; text-align: center;
+    z-index: 6; pointer-events: none;
+    font-size: 25px; font-weight: 900; letter-spacing: .06em;
+    opacity: 0; transition: opacity .12s, transform .25s; transform: scale(.7);
+    text-shadow: 0 2px 14px rgba(0,0,0,.8);
+  }
+  #shotFx.show { opacity: 1; transform: scale(1); }
+
+  #bottomBar {
+    position: absolute; left: 0; right: 0; bottom: max(12px, env(safe-area-inset-bottom));
+    padding: 0 14px; z-index: 6;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    pointer-events: none; gap: 10px;
+  }
+  #gaugeWrap { flex: 1; min-width: 90px; max-width: 150px; }
+  #gaugeLabel { font-size: 9px; letter-spacing: .12em; color: #cfe9dd; opacity: .7; margin-bottom: 4px; }
+  #gaugeTrack { height: 7px; border-radius: 4px; background: rgba(255,255,255,.16); overflow: hidden; }
+  #gaugeFill { height: 100%; width: 0%; background: linear-gradient(90deg,#4fd6a0,#ffd54a); transition: width .18s; }
+  #abilityBar { display: flex; gap: 6px; pointer-events: auto; }
+  .abilBtn {
+    position: relative; width: 54px; height: 56px; border-radius: 14px;
+    border: 1.5px solid rgba(255,255,255,.22); background: rgba(10,30,22,.75);
+    color: #eafff2; font-size: 9px; font-weight: 700;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; line-height: 1.2; backdrop-filter: blur(4px);
+  }
+  .abilBtn .ico { font-size: 17px; }
+  .abilBtn .kb { font-size: 8px; opacity: .5; }
+  .abilBtn.slow  { border-color: rgba(110,180,255,.6); }
+  .abilBtn.power { border-color: rgba(255,140,90,.6); }
+  .abilBtn.hole  { border-color: rgba(190,120,255,.6); }
+  .abilBtn.multi { border-color: rgba(120,235,170,.6); }
+  .abilBtn:active { transform: scale(.94); }
+  .abilBtn.empty { opacity: .26; }
+  .abilBtn .cnt {
+    position: absolute; top: -6px; right: -5px;
+    background: #ffd54a; color: #33270a; font-size: 10px; font-weight: 800;
+    min-width: 17px; height: 17px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #slowVignette {
+    position: absolute; inset: 0; z-index: 4; pointer-events: none;
+    box-shadow: inset 0 0 130px 40px rgba(60,150,255,.55);
+    opacity: 0; transition: opacity .25s;
+  }
+  #slowVignette.on { opacity: 1; }
+  #flash {
+    position: absolute; inset: 0; z-index: 5; pointer-events: none;
+    background: #fff; opacity: 0; transition: opacity .18s;
+  }
+
   .screen {
     position: absolute; inset: 0; z-index: 10;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    text-align: center; padding: 28px;
-    background: rgba(4, 14, 10, .78);
-    backdrop-filter: blur(3px);
-    color: #eafff2;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px;
+    background: rgba(4,14,10,.82); backdrop-filter: blur(3px); color: #eafff2;
+    overflow-y: auto;
   }
-  .screen.hidden { display: none; }
-  .screen h1 { font-size: 30px; font-weight: 800; margin-bottom: 6px; letter-spacing: .02em; }
-  .screen h2 { font-size: 15px; font-weight: 600; opacity: .75; margin-bottom: 22px; }
-  .screen p { font-size: 13.5px; line-height: 1.85; opacity: .85; margin-bottom: 24px; }
-  .btn {
-    background: #ffd54a; color: #2b2205; border: none;
-    padding: 15px 42px; border-radius: 30px;
-    font-size: 16px; font-weight: 800; letter-spacing: .05em;
-    pointer-events: auto; cursor: pointer;
-  }
+  .screen.hidden { display: none !important; }
+  .screen h1 { font-size: 28px; font-weight: 800; margin-bottom: 3px; }
+  .screen h2 { font-size: 13px; font-weight: 600; opacity: .7; margin-bottom: 16px; }
+  .btn { background: #ffd54a; color: #2b2205; border: none;
+    padding: 13px 38px; border-radius: 30px; font-size: 15px; font-weight: 800;
+    pointer-events: auto; cursor: pointer; }
   .btn:active { transform: scale(.96); }
-  .btn.sub {
-    background: transparent; color: #eafff2;
-    border: 1.5px solid rgba(255,255,255,.35);
-    padding: 11px 28px; font-size: 14px; margin-top: 12px;
-  }
-  #resultStats {
-    font-size: 13px; line-height: 2; opacity: .8;
-    margin-bottom: 22px; text-align: left;
-    border-top: 1px solid rgba(255,255,255,.15);
-    border-bottom: 1px solid rgba(255,255,255,.15);
-    padding: 12px 4px;
-    min-width: 200px;
-  }
-  #resultStats span { float: right; font-weight: 700; opacity: 1; }
-  #bigScore { font-size: 42px; font-weight: 800; margin-bottom: 18px; letter-spacing: .04em; }
-  .phaseTag {
-    position: absolute; bottom: 10px; left: 0; right: 0;
-    text-align: center; font-size: 10px; opacity: .3; color: #eafff2;
-    z-index: 4; pointer-events: none; letter-spacing: .1em;
-  }
+  .btn.sub { background: transparent; color: #eafff2;
+    border: 1.5px solid rgba(255,255,255,.32); padding: 9px 24px; font-size: 13px; margin-top: 10px; }
+  .howto { text-align: left; font-size: 12px; line-height: 1.7;
+    background: rgba(255,255,255,.06); border-radius: 14px;
+    padding: 12px 14px; margin-bottom: 16px; max-width: 340px; }
+  .howto b { color: #ffd54a; }
+  .howto .row { display: flex; gap: 8px; margin-bottom: 4px; }
+  .howto .k { min-width: 88px; font-weight: 700; opacity: .9; }
+  .diffRow { display: flex; gap: 8px; margin-bottom: 18px; }
+  .diffBtn { background: rgba(255,255,255,.08); border: 1.5px solid rgba(255,255,255,.2);
+    color: #eafff2; padding: 9px 18px; border-radius: 20px; font-size: 13px; font-weight: 700;
+    pointer-events: auto; }
+  .diffBtn.on { background: #ffd54a; color: #2b2205; border-color: #ffd54a; }
+  #resultStats { font-size: 12.5px; line-height: 1.95; opacity: .85;
+    margin-bottom: 18px; text-align: left;
+    border-top: 1px solid rgba(255,255,255,.15); border-bottom: 1px solid rgba(255,255,255,.15);
+    padding: 10px 4px; min-width: 220px; }
+  #resultStats span { float: right; font-weight: 700; }
+  #bigScore { font-size: 38px; font-weight: 800; margin-bottom: 14px; }
+  .phaseTag { position: absolute; top: 58px; left: 0; right: 0; text-align: center;
+    font-size: 9px; opacity: .26; color: #eafff2; z-index: 4; pointer-events: none; letter-spacing: .12em; }
 </style>
 </head>
 <body>
 <div id="app">
   <canvas id="cv"></canvas>
+  <div id="slowVignette"></div>
+  <div id="flash"></div>
 
   <div id="hud">
-    <div class="scoreBox">
-      <div class="scoreLabel">YOU</div>
-      <div class="scoreVal" id="pScore">0</div>
+    <div class="scoreBox"><div class="scoreLabel">YOU</div><div class="scoreVal" id="pScore">0</div></div>
+    <div id="centerHud"><div id="rallyView"></div><div id="serveMsg"></div></div>
+    <div class="scoreBox"><div class="scoreLabel">CPU</div><div class="scoreVal" id="cScore">0</div></div>
+  </div>
+  <button id="muteBtn">🔊</button>
+  <div class="phaseTag">PHASE 3 — 特殊能力 / 演出 / 難易度</div>
+  <div id="shotFx"></div>
+
+  <div id="bottomBar">
+    <div id="gaugeWrap">
+      <div id="gaugeLabel">COMBO GAUGE</div>
+      <div id="gaugeTrack"><div id="gaugeFill"></div></div>
     </div>
-    <div id="centerHud">
-      <div id="rallyView"></div>
-      <div id="serveMsg"></div>
-    </div>
-    <div class="scoreBox">
-      <div class="scoreLabel">CPU</div>
-      <div class="scoreVal" id="cScore">0</div>
+    <div id="abilityBar">
+      <button class="abilBtn slow empty" id="btnSlow"><span class="ico">🕐</span>スロー<span class="kb">A</span><span class="cnt" id="cntSlow" style="display:none">0</span></button>
+      <button class="abilBtn power empty" id="btnPower"><span class="ico">🔥</span>パワー<span class="kb">S</span><span class="cnt" id="cntPower" style="display:none">0</span></button>
+      <button class="abilBtn hole empty" id="btnHole"><span class="ico">🕳</span>ホール<span class="kb">D</span><span class="cnt" id="cntHole" style="display:none">0</span></button>
+      <button class="abilBtn multi empty" id="btnMulti"><span class="ico">⚪</span>2球<span class="kb">F</span><span class="cnt" id="cntMulti" style="display:none">0</span></button>
     </div>
   </div>
 
-  <div class="phaseTag">PHASE 1 — 物理 / 操作 / CPU / 得点</div>
-
   <div class="screen" id="titleScreen">
     <h1>卓球ゲーム</h1>
-    <h2>PHASE 1 プロトタイプ</h2>
-    <p>
-      画面を指でなぞってラケットを左右に動かす<br>
-      ボールが当たれば自動で返球される<br>
-      <strong>11点先取</strong>で勝利
-    </p>
+    <h2>PHASE 3</h2>
+    <div class="howto">
+      <div class="row"><span class="k">サーブ</span><span><b>自分のコート→相手のコート</b>の順にタップ</span></div>
+      <div class="row"><span class="k">動かす</span><span>指で上下左右になぞる（高さも変わる）</span></div>
+      <div class="row"><span class="k">擦り上げる</span><span><b>ドライブ</b> / 素早く上へ<b>スマッシュ</b></span></div>
+      <div class="row"><span class="k">切り下ろす</span><span><b>カット</b>（浮いて失速）</span></div>
+      <div class="row"><span class="k">横になぞる</span><span><b>横回転</b>（曲がる）</span></div>
+      <div class="row"><span class="k">止めて当てる</span><span><b>ストップ</b>（ネット際に落ちる）</span></div>
+      <div class="row"><span class="k">能力</span><span>ボタン or キー <b>A S D F</b></span></div>
+    </div>
+    <div class="diffRow">
+      <button class="diffBtn" data-d="easy">かんたん</button>
+      <button class="diffBtn on" data-d="normal">ふつう</button>
+      <button class="diffBtn" data-d="hard">むずかしい</button>
+    </div>
     <button class="btn" id="startBtn">はじめる</button>
   </div>
 
@@ -130,7 +181,10 @@
     <div id="resultStats">
       最大ラリー <span id="stMaxRally">0</span><br>
       総ラリー数 <span id="stTotalRally">0</span><br>
-      返球成功率 <span id="stAccuracy">0%</span>
+      スマッシュ <span id="stSmash">0</span><br>
+      PERFECT <span id="stPerfect">0</span><br>
+      能力使用 <span id="stAbility">0</span><br>
+      ホール成功 <span id="stHole">0</span>
     </div>
     <button class="btn" id="againBtn">もう一度</button>
     <button class="btn sub" id="toTitleBtn">タイトルへ</button>
@@ -142,564 +196,1166 @@
 (function () {
 'use strict';
 
-// ═══════════════════════════════════════════
-//  定数（要件定義書 v2.0 第3章・第4章に準拠）
-// ═══════════════════════════════════════════
-const TABLE_HALF_X = 0.7625;
-const TABLE_HALF_Z = 1.37;
-const TABLE_THICK  = 0.04;
-const NET_H        = 0.1525;
-const NET_HALF_X   = 0.915;
-const BALL_R       = 0.02;
-const BALL_R_VIEW  = 0.025;
-const PADDLE_R     = 0.085;
-const PADDLE_Y     = 0.20;          // MVPではY固定
-const PLAYER_Z     = 1.60;
-const CPU_Z        = -1.60;
-const PADDLE_X_LIM = 0.95;
+// ══════════ 定数 ══════════
+const TABLE_HALF_X = 0.7625, TABLE_HALF_Z = 1.37, TABLE_THICK = 0.04;
+const NET_H = 0.1525, NET_HALF_X = 0.915;
+const BALL_R = 0.02, BALL_R_VIEW = 0.025;
+const PADDLE_R = 0.085, PADDLE_R_P = 0.115, PADDLE_Y = 0.20;
+const PADDLE_Y_MIN = 0.055, PADDLE_Y_MAX = 0.46;
+const Y_BAND_TOP = 0.36, Y_BAND_SIZE = 0.36;
+const PLAYER_Z = 1.60, CPU_Z = -1.60, PADDLE_X_LIM = 0.95;
+const PLAYER_Z_MIN = 0.20;        // ネット手前まで前進できる
+const PADDLE_Z_RANGE = 0.34, AIM_WIDTH = 0.90, VX_LIMIT = 1.9;
+const PLAYER_Z_SPEED = 2.8;       // 前後の移動速度
+const MIN_Y_OVER_TABLE_P = 0.14;  // 台上を通るときのラケット最低高さ（自分）
+const MIN_Y_OVER_TABLE_C = 0.12;  // 同（CPU）
+const STALL_LIMIT = 2.0;          // 動きが止まった球を打ち切るまでの秒数
 
-const GRAVITY      = -4.2;
-const REST_TABLE   = 0.78;
-const AIR_DRAG     = 0.998;
+const GRAVITY = -4.2, REST_TABLE = 0.78;
+const MAGNUS_Y = 1.95, MAGNUS_X = 1.15;
 
-// 判定の甘さ（第4.4章：見た目より20%大きく）
-const HIT_R_X      = (PADDLE_R + BALL_R) * 1.2;
-const HIT_R_Y      = (PADDLE_R + BALL_R) * 1.55;  // 縦は体感重視でさらに緩め
+// プレイヤー側の判定はさらに拡大
+const HIT_R = {
+  player: { x: (PADDLE_R_P + BALL_R) * 1.75, y: (PADDLE_R_P + BALL_R) * 2.25 },
+  cpu:    { x: (PADDLE_R   + BALL_R) * 1.2,  y: (PADDLE_R   + BALL_R) * 1.3  }
+};
 
-// CPU（第8章：難易度「ふつう」）
-const CPU_SPEED    = 2.1;
-const CPU_DELAY    = 0.12;
-const CPU_ERROR    = 0.12;
-const CPU_MISS     = 0.08;
+const DIFF = {
+  easy:   { speed: 1.4, delay: 0.25, err: 0.25, miss: 0.20 },
+  normal: { speed: 2.1, delay: 0.12, err: 0.12, miss: 0.08 },
+  hard:   { speed: 2.9, delay: 0.04, err: 0.05, miss: 0.03 }
+};
+let CPU = DIFF.normal;
 
-const WIN_SCORE    = 11;
-const SERVE_WAIT   = 1.0;
+const WIN_SCORE = 11, SERVE_WAIT = 1.0, VZ_MAX = 5.6;
+const SWIPE_WINDOW = 0.25, SWIPE_RECENT = 0.10;
+const SWIPE_MIN_DIST = 22, SMASH_DIST = 80, SMASH_TIME = 0.15;
 
-// ═══════════════════════════════════════════
-//  Three.js セットアップ
-// ═══════════════════════════════════════════
+const GAUGE_NORMAL = 12, GAUGE_PERFECT = 25, STOCK_MAX = 3;
+const SLOW_SCALE = 0.4, SLOW_DURATION = 2.5, POWER_MULT = 2.0;
+const STOP_SPEED = 1.55, STOP_DEPTH_MIN = 0.14, STOP_DEPTH_MAX = 0.32;
+const STOP_SPIN = -0.5, STOP_BOUNCE_KILL = 0.42;
+
+const HOLE_R = 0.18, HOLE_DURATION = 6.0;
+const MAX_BALLS = 2, MULTI_ANGLE = 15 * Math.PI / 180;
+
+// ══════════ Three.js ══════════
 const canvas = document.getElementById('cv');
 if (typeof THREE === 'undefined') {
-  document.getElementById('titleScreen').innerHTML =
-    '<h1>読み込みエラー</h1><p>3Dライブラリを読み込めませんでした。<br>通信環境を確認して再読み込みしてください。</p>';
+  document.getElementById('titleScreen').innerHTML = '<h1>読み込みエラー</h1><p>3Dライブラリを読み込めませんでした。</p>';
   return;
 }
-
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a1410);
-scene.fog = new THREE.Fog(0x0a1410, 3.2, 8.5);
+scene.fog = new THREE.Fog(0x0a1410, 4.2, 11);
 
-const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 30);
-camera.position.set(0, 0.95, 2.45);
-const camLook = new THREE.Vector3(0, 0.15, -0.4);
+const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 30);
+const CAM_BASE = new THREE.Vector3(0, 1.22, 3.05);
+camera.position.copy(CAM_BASE);
+const camLook = new THREE.Vector3(0, 0.10, -0.55);
 camera.lookAt(camLook);
 
 const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
+  camera.aspect = w / h; camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 120));
 resize();
 
-// ── ライト ──
 scene.add(new THREE.AmbientLight(0xffffff, 0.62));
 const key = new THREE.DirectionalLight(0xffffff, 0.85);
-key.position.set(1.5, 3.2, 1.8);
-scene.add(key);
+key.position.set(1.5, 3.2, 1.8); scene.add(key);
 const rim = new THREE.DirectionalLight(0x88c8ff, 0.3);
-rim.position.set(-1.5, 1.8, -2.5);
-scene.add(rim);
+rim.position.set(-1.5, 1.8, -2.5); scene.add(rim);
 
-// ── 床 ──
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(24, 24),
-  new THREE.MeshStandardMaterial({ color: 0x0d2119, roughness: 1 })
-);
-floor.rotation.x = -Math.PI / 2;
-floor.position.y = -0.76;
-scene.add(floor);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(24, 24),
+  new THREE.MeshStandardMaterial({ color: 0x0d2119, roughness: 1 }));
+floor.rotation.x = -Math.PI/2; floor.position.y = -0.76; scene.add(floor);
 
-// ── 卓球台 ──
-const table = new THREE.Mesh(
-  new THREE.BoxGeometry(TABLE_HALF_X * 2, TABLE_THICK, TABLE_HALF_Z * 2),
-  new THREE.MeshStandardMaterial({ color: 0x1a6647, roughness: 0.75, metalness: 0.05 })
-);
-table.position.set(0, -TABLE_THICK / 2, 0);
-scene.add(table);
+const table = new THREE.Mesh(new THREE.BoxGeometry(TABLE_HALF_X*2, TABLE_THICK, TABLE_HALF_Z*2),
+  new THREE.MeshStandardMaterial({ color: 0x1a6647, roughness: .75 }));
+table.position.set(0, -TABLE_THICK/2, 0); scene.add(table);
 
-// ── ライン ──
 const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 function line(w, d, x, z) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.002, d), lineMat);
-  m.position.set(x, 0.001, z);
-  scene.add(m);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, .002, d), lineMat);
+  m.position.set(x, .001, z); scene.add(m);
 }
-line(TABLE_HALF_X * 2, 0.016, 0, TABLE_HALF_Z - 0.008);
-line(TABLE_HALF_X * 2, 0.016, 0, -TABLE_HALF_Z + 0.008);
-line(0.016, TABLE_HALF_Z * 2, TABLE_HALF_X - 0.008, 0);
-line(0.016, TABLE_HALF_Z * 2, -TABLE_HALF_X + 0.008, 0);
-line(0.012, TABLE_HALF_Z * 2, 0, 0);
+line(TABLE_HALF_X*2, .016, 0,  TABLE_HALF_Z-.008);
+line(TABLE_HALF_X*2, .016, 0, -TABLE_HALF_Z+.008);
+line(.016, TABLE_HALF_Z*2,  TABLE_HALF_X-.008, 0);
+line(.016, TABLE_HALF_Z*2, -TABLE_HALF_X+.008, 0);
+line(.012, TABLE_HALF_Z*2, 0, 0);
 
-// ── 脚 ──
-const legMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.6 });
-[[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(s => {
-  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.72, 8), legMat);
-  leg.position.set(s[0] * (TABLE_HALF_X - 0.09), -0.40, s[1] * (TABLE_HALF_Z - 0.14));
-  scene.add(leg);
+const legMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: .6 });
+[[-1,1],[1,1],[-1,-1],[1,-1]].forEach(s => {
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.72,8), legMat);
+  leg.position.set(s[0]*(TABLE_HALF_X-.09), -.40, s[1]*(TABLE_HALF_Z-.14)); scene.add(leg);
 });
 
-// ── ネット ──
-const net = new THREE.Mesh(
-  new THREE.BoxGeometry(NET_HALF_X * 2, NET_H, 0.008),
-  new THREE.MeshStandardMaterial({ color: 0xdfe8e4, transparent: true, opacity: 0.72, side: THREE.DoubleSide })
-);
-net.position.set(0, NET_H / 2, 0);
-scene.add(net);
-const netTop = new THREE.Mesh(
-  new THREE.BoxGeometry(NET_HALF_X * 2, 0.012, 0.012),
-  new THREE.MeshStandardMaterial({ color: 0xffffff })
-);
-netTop.position.set(0, NET_H, 0);
-scene.add(netTop);
+const net = new THREE.Mesh(new THREE.BoxGeometry(NET_HALF_X*2, NET_H, .008),
+  new THREE.MeshStandardMaterial({ color: 0xdfe8e4, transparent:true, opacity:.72, side:THREE.DoubleSide }));
+net.position.set(0, NET_H/2, 0); scene.add(net);
+const netTop = new THREE.Mesh(new THREE.BoxGeometry(NET_HALF_X*2, .012, .012),
+  new THREE.MeshStandardMaterial({ color: 0xffffff }));
+netTop.position.set(0, NET_H, 0); scene.add(netTop);
 [-NET_HALF_X, NET_HALF_X].forEach(x => {
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, NET_H, 8), legMat);
-  post.position.set(x, NET_H / 2, 0);
-  scene.add(post);
+  const p = new THREE.Mesh(new THREE.CylinderGeometry(.011,.011,NET_H,8), legMat);
+  p.position.set(x, NET_H/2, 0); scene.add(p);
 });
 
-// ── ボール ──
-const ball = new THREE.Mesh(
-  new THREE.SphereGeometry(BALL_R_VIEW, 18, 18),
-  new THREE.MeshStandardMaterial({ color: 0xfff7dc, roughness: 0.35, emissive: 0x332a10, emissiveIntensity: 0.5 })
-);
-scene.add(ball);
+// ── ボールの見た目（プール） ──
+const TRAIL_N = 16;
+function createBallVisual() {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xfff7dc, roughness: .35,
+    emissive: 0x332a10, emissiveIntensity: .6 });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_R_VIEW, 18, 18), mat);
+  scene.add(mesh);
 
-// ── 影（奥行き把握の補助） ──
-const shadow = new THREE.Mesh(
-  new THREE.CircleGeometry(BALL_R_VIEW * 1.5, 16),
-  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 })
-);
-shadow.rotation.x = -Math.PI / 2;
-shadow.position.y = 0.003;
-scene.add(shadow);
+  const sh = new THREE.Mesh(new THREE.CircleGeometry(BALL_R_VIEW*1.5, 16),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: .3 }));
+  sh.rotation.x = -Math.PI/2; sh.position.y = .003; scene.add(sh);
+
+  const pos = new Float32Array(TRAIL_N * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const tmat = new THREE.LineBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: .35 });
+  const ln = new THREE.Line(geo, tmat);
+  scene.add(ln);
+
+  return { mesh, mat, shadow: sh, trail: ln, trailGeo: geo, trailPos: pos, trailMat: tmat, hist: [] };
+}
+const visPool = [];
+for (let i = 0; i < MAX_BALLS; i++) visPool.push(createBallVisual());
+function hideVisual(v) {
+  v.mesh.visible = false; v.shadow.visible = false; v.trail.visible = false; v.hist.length = 0;
+}
 
 // ── ラケット ──
-function makePaddle(faceColor) {
+function makePaddle(c, R) {
   const g = new THREE.Group();
-  const face = new THREE.Mesh(
-    new THREE.CylinderGeometry(PADDLE_R, PADDLE_R, 0.02, 26),
-    new THREE.MeshStandardMaterial({ color: faceColor, roughness: 0.45 })
-  );
-  face.rotation.x = Math.PI / 2;
-  g.add(face);
-  const edge = new THREE.Mesh(
-    new THREE.TorusGeometry(PADDLE_R, 0.006, 6, 26),
-    new THREE.MeshStandardMaterial({ color: 0x101010 })
-  );
-  g.add(edge);
-  const grip = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.019, 0.024, 0.10, 10),
-    new THREE.MeshStandardMaterial({ color: 0x6b452a, roughness: 0.8 })
-  );
-  grip.position.y = -(PADDLE_R + 0.045);
-  g.add(grip);
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(R, R, .02, 26),
+    new THREE.MeshStandardMaterial({ color: c, roughness: .45 }));
+  face.rotation.x = Math.PI/2; g.add(face);
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(R, .006, 6, 26),
+    new THREE.MeshStandardMaterial({ color: 0x101010 })));
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(.019,.024,.10,10),
+    new THREE.MeshStandardMaterial({ color: 0x6b452a, roughness:.8 }));
+  grip.position.y = -(R + .045); g.add(grip);
+  g.userData.face = face;
   return g;
 }
-const pPaddle = makePaddle(0x3f9dff);
-const cPaddle = makePaddle(0xff5f4f);
+const pPaddle = makePaddle(0x3f9dff, PADDLE_R_P), cPaddle = makePaddle(0xff5f4f, PADDLE_R);
 scene.add(pPaddle, cPaddle);
 
-// ═══════════════════════════════════════════
-//  ゲーム状態
-// ═══════════════════════════════════════════
+// ── サーブ着弾点マーカー ──
+function makeMarker(color) {
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.RingGeometry(.055,.075,24),
+    new THREE.MeshBasicMaterial({ color, transparent:true, opacity:.95, side:THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI/2; g.add(ring);
+  const dot = new THREE.Mesh(new THREE.CircleGeometry(.022,16), new THREE.MeshBasicMaterial({ color }));
+  dot.rotation.x = -Math.PI/2; g.add(dot);
+  g.position.y = .005; g.visible = false; scene.add(g);
+  return g;
+}
+const marker1 = makeMarker(0x6fe3ff), marker2 = makeMarker(0xffd54a);
+function hideMarkers(){ marker1.visible=false; marker2.visible=false; }
+
+// ── コートホール ──
+const holeGroup = new THREE.Group();
+const holeDisc = new THREE.Mesh(new THREE.CircleGeometry(HOLE_R, 32),
+  new THREE.MeshBasicMaterial({ color: 0x05060a }));
+holeDisc.rotation.x = -Math.PI/2; holeGroup.add(holeDisc);
+const holeRing = new THREE.Mesh(new THREE.RingGeometry(HOLE_R*0.92, HOLE_R*1.06, 32),
+  new THREE.MeshBasicMaterial({ color: 0xbb7cff, transparent:true, opacity:.9, side:THREE.DoubleSide }));
+holeRing.rotation.x = -Math.PI/2; holeGroup.add(holeRing);
+holeGroup.position.y = .006; holeGroup.visible = false; scene.add(holeGroup);
+
+// ── パーティクル ──
+const PMAX = 260;
+const pPos = new Float32Array(PMAX*3), pCol = new Float32Array(PMAX*3);
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos,3));
+pGeo.setAttribute('color', new THREE.BufferAttribute(pCol,3));
+const pMat = new THREE.PointsMaterial({ size: .045, vertexColors: true,
+  transparent: true, opacity: .95, blending: THREE.AdditiveBlending, depthWrite: false });
+const points = new THREE.Points(pGeo, pMat);
+scene.add(points);
+const parts = [];
+for (let i = 0; i < PMAX; i++) parts.push({ life: 0, x:0,y:-99,z:0, vx:0,vy:0,vz:0, r:0,g:0,b:0, max:1 });
+
+function burst(x, y, z, n, color, power) {
+  const c = new THREE.Color(color);
+  let made = 0;
+  for (let i = 0; i < PMAX && made < n; i++) {
+    const p = parts[i];
+    if (p.life > 0) continue;
+    const a = Math.random()*Math.PI*2, e = Math.random()*Math.PI - Math.PI/2;
+    const sp = (0.4 + Math.random()*0.9) * power;
+    p.x=x; p.y=y; p.z=z;
+    p.vx=Math.cos(a)*Math.cos(e)*sp; p.vy=Math.abs(Math.sin(e))*sp*1.2+0.2; p.vz=Math.sin(a)*Math.cos(e)*sp;
+    p.r=c.r; p.g=c.g; p.b=c.b;
+    p.max = 0.28 + Math.random()*0.35; p.life = p.max;
+    made++;
+  }
+}
+function updateParticles(dt) {
+  for (let i = 0; i < PMAX; i++) {
+    const p = parts[i];
+    if (p.life <= 0) { pPos[i*3+1] = -99; pCol[i*3]=pCol[i*3+1]=pCol[i*3+2]=0; continue; }
+    p.life -= dt;
+    p.vy += GRAVITY * 0.55 * dt;
+    p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt;
+    const f = Math.max(p.life,0) / p.max;
+    pPos[i*3]=p.x; pPos[i*3+1]=p.y; pPos[i*3+2]=p.z;
+    pCol[i*3]=p.r*f; pCol[i*3+1]=p.g*f; pCol[i*3+2]=p.b*f;
+  }
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.color.needsUpdate = true;
+}
+
+// ══════════ 音 ══════════
+let actx = null, muted = false;
+function initAudio(){ if(!actx){ try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } }
+function beep(freq, dur, type, gain, slideTo) {
+  if (!actx || muted) return;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type || 'square'; o.frequency.value = freq;
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, actx.currentTime + dur);
+  g.gain.setValueAtTime(gain || .05, actx.currentTime);
+  g.gain.exponentialRampToValueAtTime(.0001, actx.currentTime + dur);
+  o.connect(g); g.connect(actx.destination);
+  o.start(); o.stop(actx.currentTime + dur);
+}
+function vibrate(ms){ if(!muted && navigator.vibrate) try{ navigator.vibrate(ms); }catch(e){} }
+document.getElementById('muteBtn').addEventListener('click', function(){
+  muted = !muted; this.textContent = muted ? '🔇' : '🔊';
+});
+
+// ══════════ 状態 ══════════
 const G = {
-  phase: 'title',       // title | serve | rally | over
-  pScore: 0,
-  cScore: 0,
-  b: { x: 0, y: 0.3, z: 0, vx: 0, vy: 0, vz: 0 },
-  prevZ: 0,
-  playerX: 0,
-  cpuX: 0,
-  cpuTargetX: 0,
-  cpuReactTimer: 0,
-  cpuWillMiss: false,
-  lastHitter: null,     // 'player' | 'cpu'
-  bounceSide: null,     // 'player' | 'cpu'
-  rally: 0,
-  maxRally: 0,
-  totalRally: 0,
-  swings: 0,
-  hits: 0,
-  server: 'player',
-  serveTimer: 0
+  phase: 'title', pScore: 0, cScore: 0,
+  balls: [],
+  playerX: 0, cpuX: 0, cpuTargetX: 0,
+  playerY: PADDLE_Y, cpuY: PADDLE_Y, cpuTargetY: PADDLE_Y,
+  playerZ: PLAYER_Z, cpuZ: CPU_Z, cpuTargetZ: CPU_Z,
+  cpuReactTimer: 0, cpuWillMiss: false, incomingBounceZ: -0.6,
+  rally: 0, maxRally: 0, totalRally: 0,
+  smashCount: 0, perfectCount: 0, abilityCount: 0, holeCount: 0,
+  server: 'player', serveTimer: 0, serveStep: 0, serveP1: null, serveP2: null,
+  gauge: 0, stock: { slow:0, power:0, hole:0, multi:0 },
+  slowTimer: 0, powerNext: false, timeScale: 1,
+  hole: null, awaitHole: false,
+  shake: 0, pendingLoss: { player:0, cpu:0 }
 };
 
 const el = {
-  p: document.getElementById('pScore'),
-  c: document.getElementById('cScore'),
-  rally: document.getElementById('rallyView'),
-  serveMsg: document.getElementById('serveMsg'),
-  title: document.getElementById('titleScreen'),
-  result: document.getElementById('resultScreen'),
-  resultTitle: document.getElementById('resultTitle'),
-  bigScore: document.getElementById('bigScore'),
-  stMax: document.getElementById('stMaxRally'),
-  stTotal: document.getElementById('stTotalRally'),
-  stAcc: document.getElementById('stAccuracy')
+  p: document.getElementById('pScore'), c: document.getElementById('cScore'),
+  rally: document.getElementById('rallyView'), serveMsg: document.getElementById('serveMsg'),
+  title: document.getElementById('titleScreen'), result: document.getElementById('resultScreen'),
+  resultTitle: document.getElementById('resultTitle'), bigScore: document.getElementById('bigScore'),
+  stMax: document.getElementById('stMaxRally'), stTotal: document.getElementById('stTotalRally'),
+  stSmash: document.getElementById('stSmash'), stPerfect: document.getElementById('stPerfect'),
+  stAbility: document.getElementById('stAbility'), stHole: document.getElementById('stHole'),
+  gaugeFill: document.getElementById('gaugeFill'),
+  shotFx: document.getElementById('shotFx'), vignette: document.getElementById('slowVignette'),
+  flash: document.getElementById('flash')
+};
+const abilBtn = {
+  slow: document.getElementById('btnSlow'), power: document.getElementById('btnPower'),
+  hole: document.getElementById('btnHole'), multi: document.getElementById('btnMulti')
+};
+const abilCnt = {
+  slow: document.getElementById('cntSlow'), power: document.getElementById('cntPower'),
+  hole: document.getElementById('cntHole'), multi: document.getElementById('cntMulti')
 };
 
-function pop(node) {
-  node.classList.add('pop');
-  setTimeout(() => node.classList.remove('pop'), 140);
+function pop(n){ n.classList.add('pop'); setTimeout(()=>n.classList.remove('pop'),140); }
+function syncScore(w){
+  el.p.textContent = G.pScore; el.c.textContent = G.cScore;
+  if (w==='player') pop(el.p); if (w==='cpu') pop(el.c);
 }
-function syncScore(which) {
-  el.p.textContent = G.pScore;
-  el.c.textContent = G.cScore;
-  if (which === 'player') pop(el.p);
-  if (which === 'cpu') pop(el.c);
+let fxTimer=null;
+function showFx(t,c){
+  el.shotFx.textContent=t; el.shotFx.style.color=c; el.shotFx.classList.add('show');
+  clearTimeout(fxTimer); fxTimer=setTimeout(()=>el.shotFx.classList.remove('show'),480);
+}
+function flash(){ el.flash.style.opacity='.42'; setTimeout(()=>el.flash.style.opacity='0',60); }
+function syncAbilityUI(){
+  el.gaugeFill.style.width = G.gauge + '%';
+  ['slow','power','hole','multi'].forEach(k=>{
+    abilBtn[k].classList.toggle('empty', G.stock[k]===0);
+    abilCnt[k].style.display = G.stock[k]>0 ? 'flex' : 'none';
+    abilCnt[k].textContent = G.stock[k];
+  });
 }
 
-// ═══════════════════════════════════════════
-//  弾道計算：指定した着弾点に落ちる vy を逆算する
-//  （これによりラリーが安定して続く）
-// ═══════════════════════════════════════════
-function launch(fromY, fromZ, toZ, targetBounceZ, speedZ, vx) {
+// ══════════ ボール管理 ══════════
+function newBall(vis) {
+  return { x:0,y:.3,z:0, vx:0,vy:0,vz:0, sx:0,sy:0,
+           stopShot:false, serveArc:false, lastHitter:null, bounceSide:null, bounceCount:0,
+           prevZ:0, alive:true, throughHole:null, stall:0, vis: vis };
+}
+function clearBalls() {
+  G.balls.length = 0;
+  visPool.forEach(hideVisual);
+}
+function spawnBall() {
+  const used = G.balls.map(b=>b.vis);
+  const free = visPool.find(v => used.indexOf(v) < 0);
+  if (!free) return null;
+  free.mesh.visible = true; free.trail.visible = true; free.hist.length = 0;
+  const b = newBall(free);
+  G.balls.push(b);
+  return b;
+}
+function killBall(b) {
+  b.alive = false;
+  hideVisual(b.vis);
+  const i = G.balls.indexOf(b);
+  if (i >= 0) G.balls.splice(i, 1);
+}
+
+// ══════════ 弾道 ══════════
+function launch(fromY, fromZ, toZ, bounceZ, speedZ, vx, spinX) {
   const dirZ = (toZ - fromZ) > 0 ? 1 : -1;
-  const distToBounce = Math.abs(targetBounceZ - fromZ);
-  const t = distToBounce / speedZ;
-  const vy = (BALL_R - fromY + 0.5 * Math.abs(GRAVITY) * t * t) / t;
-  return { vy: vy, vz: dirZ * speedZ, vx: vx };
+  const gEff = Math.abs(GRAVITY) + MAGNUS_Y * spinX;
+  const t = Math.abs(bounceZ - fromZ) / speedZ;
+  const vy = (BALL_R - fromY + .5*gEff*t*t) / t;
+  return { vy: vy, vz: dirZ*speedZ, vx: vx };
 }
+function rallySpeed(){ return Math.min(2.45 + G.rally*0.055, 4.1); }
 
-function rallySpeed() {
-  return Math.min(2.45 + G.rally * 0.055, 4.1);
+// ネットを越えられるか（越えられないなら着弾点を奥に下げて解き直す）
+function netHeightAt(y0, z0, vy, vz, spinX) {
+  if (vz === 0) return 999;
+  const t = (0 - z0) / vz;
+  if (t <= 0) return 999;
+  const g = Math.abs(GRAVITY) + MAGNUS_Y * spinX;
+  return y0 + vy * t - 0.5 * g * t * t;
 }
-
-// ═══════════════════════════════════════════
-//  サーブ
-// ═══════════════════════════════════════════
-function startServe(server) {
-  G.server = server;
-  G.phase = 'serve';
-  G.serveTimer = SERVE_WAIT;
-  G.rally = 0;
-  G.bounceSide = null;
-  G.lastHitter = null;
-  G.cpuWillMiss = false;
-
-  const b = G.b;
-  if (server === 'player') {
-    b.x = G.playerX * 0.5; b.y = 0.34; b.z = PLAYER_Z - 0.18;
-  } else {
-    b.x = G.cpuX * 0.5;    b.y = 0.34; b.z = CPU_Z + 0.18;
+function launchOverNet(fromY, fromZ, toZ, bounceZ, speedZ, vx, spinX) {
+  const dir = bounceZ >= 0 ? 1 : -1;
+  let bz = bounceZ;
+  let r = launch(fromY, fromZ, toZ, bz, speedZ, vx, spinX);
+  for (let i = 0; i < 8; i++) {
+    if (netHeightAt(fromY, fromZ, r.vy, r.vz, spinX) > NET_H + BALL_R + 0.035) break;
+    bz += dir * 0.16;                       // 着弾点を奥へ
+    if (Math.abs(bz) > TABLE_HALF_Z - 0.12) break;
+    r = launch(fromY, fromZ, toZ, bz, speedZ, vx, spinX);
   }
-  b.vx = 0; b.vy = 0; b.vz = 0;
-  G.prevZ = b.z;
-  el.serveMsg.textContent = server === 'player' ? 'あなたのサーブ' : 'CPUのサーブ';
+  return r;
 }
 
-function executeServe() {
-  const b = G.b;
-  const server = G.server;
-  const toZ = server === 'player' ? CPU_Z : PLAYER_Z;
-  const bounceZ = (server === 'player' ? -1 : 1) * (0.45 + Math.random() * 0.35);
-  const vx = (Math.random() - 0.5) * 0.30;
-  const r = launch(b.y, b.z, toZ, bounceZ, 2.45, vx);
-  b.vx = r.vx; b.vy = r.vy; b.vz = r.vz;
-  G.lastHitter = server;
-  G.bounceSide = null;
-  G.phase = 'rally';
-  el.serveMsg.textContent = '';
+// ══════════ スワイプ ══════════
+const ptr = [];
+function recordPtr(x,y){
+  const now = performance.now()/1000;
+  ptr.push({x,y,t:now});
+  while (ptr.length && now - ptr[0].t > .4) ptr.shift();
+}
+function recentSwipeSpeed(){
+  const now = performance.now()/1000;
+  const w = ptr.filter(p=>now-p.t<=.09);
+  if (w.length<2) return 0;
+  const a=w[0], b=w[w.length-1], dt=Math.max(b.t-a.t,.016);
+  return Math.hypot(b.x-a.x,b.y-a.y)/dt;
+}
+function analyzeSwipe(){
+  const now = performance.now()/1000;
+  const win = ptr.filter(p=>now-p.t<=SWIPE_WINDOW);
+  const res = { kind:'flat', spinX:0, spinY:0, mult:1, timing:'LATE', smash:false, stop:false };
+  if (win.length<2){ res.kind='stop'; res.stop=true; res.spinX=STOP_SPIN; return res; }
+  const a=win[0], b=win[win.length-1];
+  const dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy), dt=Math.max(b.t-a.t,.016);
+  const recent = ptr.filter(p=>now-p.t<=SWIPE_RECENT);
+  let rd=0;
+  if (recent.length>=2){ const r0=recent[0], r1=recent[recent.length-1]; rd=Math.hypot(r1.x-r0.x,r1.y-r0.y); }
+  if (dist < SWIPE_MIN_DIST){ res.kind='stop'; res.stop=true; res.spinX=STOP_SPIN; return res; }
+  res.timing = rd >= SWIPE_MIN_DIST ? 'PERFECT' : 'GOOD';
+  const up = -dy;
+  if (Math.abs(dy) >= Math.abs(dx)) {
+    if (up > 0) {
+      if (dist>=SMASH_DIST && dt<=SMASH_TIME){ res.kind='smash'; res.spinX=.6; res.mult=1.8; res.smash=true; }
+      else { res.kind='top'; res.spinX=1.0; res.mult=1.15; }
+    } else { res.kind='back'; res.spinX=-1.0; res.mult=.85; }
+  } else {
+    const s = THREE.MathUtils.clamp((dist-SWIPE_MIN_DIST)/70, .25, 1);
+    res.kind='side'; res.spinY=(dx>0?1:-1)*s; res.mult=1.0;
+  }
+  res.mult *= THREE.MathUtils.clamp(.7 + (dist/dt)/1200, .7, 1.8);
+  return res;
 }
 
-// ═══════════════════════════════════════════
-//  打球処理
-// ═══════════════════════════════════════════
-function hitBy(who, dx) {
-  const b = G.b;
-  G.rally++;
-  G.totalRally++;
+// ══════════ サーブ ══════════
+function startServe(server) {
+  G.server = server; G.phase = 'serve';
+  G.rally = 0; G.cpuWillMiss = false;
+  G.incomingBounceZ = -0.6; G.cpuTargetZ = CPU_Z;
+  G.pendingLoss.player = 0; G.pendingLoss.cpu = 0;
+  clearBalls();
+  const b = spawnBall();
+  b.x = (server==='player'?G.playerX:G.cpuX)*.5;
+  b.y = .34;
+  b.z = server==='player' ? PLAYER_Z-.18 : CPU_Z+.18;
+  b.prevZ = b.z;
+  G.serveP1=null; G.serveP2=null; hideMarkers();
+  if (server==='player'){
+    G.serveStep=1; G.serveTimer=12;
+    el.serveMsg.textContent='① 自分のコートをタップ';
+  } else {
+    G.serveStep=0; G.serveTimer=SERVE_WAIT;
+    el.serveMsg.textContent='CPUのサーブ';
+  }
+}
+// ゲームループと同じ物理でサーブ弾道を実際に飛ばしてみる
+function simServe(x0, y0, z0, vx, vy0, vz, sy){
+  const g = Math.abs(GRAVITY), dt = 1/240;
+  let x=x0, y=y0, z=z0, vyy=vy0, vxx=vx;
+  let b1=null, b2=null, net=false;
+  for (let i=0;i<3000;i++){
+    const pz=z;
+    vyy += -g*dt; vxx += MAGNUS_X*sy*dt;
+    x += vxx*dt; y += vyy*dt; z += vz*dt;
+    if ((pz>0.02 && z<=0.02) || (pz<-0.02 && z>=-0.02)){
+      if (y < NET_H + BALL_R + 0.015){ net=true; break; }
+    }
+    if (y-BALL_R<=0 && vyy<0 && Math.abs(x)<=TABLE_HALF_X && Math.abs(z)<=TABLE_HALF_Z){
+      y=BALL_R; vyy=-vyy*REST_TABLE;
+      if (b1===null) b1=z; else { b2=z; break; }
+    }
+    if (y < -0.5 || Math.abs(z) > 2.4) break;
+  }
+  return { b1:b1, b2:b2, net:net };
+}
+
+// 1バウンド目を z1 に落とすための初速（垂直成分）
+function serveVy(y0, dzA, vz){
+  const g = Math.abs(GRAVITY);
+  const tA = dzA / vz;
+  return { vy: (BALL_R - y0 + 0.5*g*tA*tA)/tA, tA: tA };
+}
+
+function serveFromPoints(server, p1, p2){
+  const b = G.balls[0] || spawnBall();
+  const sign = server==='player' ? 1 : -1;
+
+  // 出球はラケットの位置から
+  const x0 = server==='player' ? G.playerX : G.cpuX;
+  const zPad = server==='player' ? PLAYER_Z : CPU_Z;
+  const z0 = zPad - sign*0.06;
+  const padY = server==='player' ? G.playerY : PADDLE_Y;
+
+  // 1バウンド目はラケットから最低限離す（真下に叩きつける弾道を防ぐ）
+  const MIN_A = 0.45;
+  let z1 = p1.z;
+  if (Math.abs(z0 - z1) < MIN_A) z1 = z0 - sign*MIN_A;
+  z1 = sign>0 ? THREE.MathUtils.clamp(z1, 0.10, TABLE_HALF_Z-0.06)
+              : THREE.MathUtils.clamp(z1, -TABLE_HALF_Z+0.06, -0.10);
+  const dzA = Math.abs(z0 - z1);
+
+  // 2バウンド目の狙い（相手コート内に丸める）
+  const wantZ2 = sign>0
+    ? THREE.MathUtils.clamp(p2.z, -(TABLE_HALF_Z-0.10), -0.14)
+    : THREE.MathUtils.clamp(p2.z,  0.14, TABLE_HALF_Z-0.10);
+
+  // 実際に飛ばして、2バウンド目が狙いに最も近くなる球速を二分探索する
+  let best = null, y0 = 0;
+  for (let iter=0; iter<4; iter++){
+    y0 = THREE.MathUtils.clamp(padY + 0.16 + iter*0.06, 0.30, 0.66);
+    let lo=1.25, hi=4.3, cand=null;
+    for (let k=0;k<26;k++){
+      const mid=(lo+hi)/2;
+      const sv=serveVy(y0, dzA, mid);
+      const r=simServe(x0, y0, z0, 0, sv.vy, -sign*mid, 0);
+      const depth = r.b2===null ? 99 : Math.abs(r.b2 - z1);
+      const want  = Math.abs(wantZ2 - z1);
+      if (depth < want) lo=mid; else hi=mid;                  // 速いほど遠くへ飛ぶ
+      if (r.b2!==null && !r.net) cand={vz:mid, vy:sv.vy, tA:sv.tA, r:r, y0:y0};
+    }
+    if (cand){ best=cand; break; }
+  }
+  if (!best){
+    y0 = THREE.MathUtils.clamp(padY + 0.16, 0.30, 0.66);
+    const sv=serveVy(y0, dzA, 1.9);
+    best = { vz:1.9, vy:sv.vy, tA:sv.tA, r:simServe(x0,y0,z0,0,sv.vy,-sign*1.9,0), y0:y0 };
+  }
+  y0 = best.y0;
+
+  const tA = best.tA;
+  const vyAfter = REST_TABLE*(Math.abs(GRAVITY)*tA - best.vy);
+  const tB = 2*vyAfter/Math.abs(GRAVITY);
+
+  // 横方向：2点のXを通るよう初速と横回転を同時に解く
+  const t1 = tA, t2 = tA + tB;
+  const lim = TABLE_HALF_X - 0.08;
+  const X1 = THREE.MathUtils.clamp(p1.x, -lim, lim) - x0;
+  const X2 = THREE.MathUtils.clamp(p2.x, -lim, lim) - x0;
+  let ax0 = 0;
+  if (t1 > 0.02 && t2 > t1 + 0.02){
+    ax0 = 2*(X2 - X1*t2/t1) / (t2*(t2 - t1));
+    ax0 = THREE.MathUtils.clamp(ax0, -MAGNUS_X, MAGNUS_X);
+  }
+  const vx0 = THREE.MathUtils.clamp((X1 - 0.5*ax0*t1*t1)/t1, -VX_LIMIT, VX_LIMIT);
+
+  // 横に振りすぎて台から外れないか検証し、外れるなら狙いを弱める
+  let vx = 0, ax = 0, sim = null;
+  for (const scale of [1, 0.75, 0.5, 0.3, 0.15, 0]){
+    const tvx = vx0*scale, tax = ax0*scale;
+    const r = simServe(x0, y0, z0, tvx, best.vy, -sign*best.vz, tax/MAGNUS_X);
+    if (r.b1!==null && r.b2!==null && !r.net){ vx=tvx; ax=tax; sim=r; break; }
+  }
+  if (!sim){ sim = simServe(x0, y0, z0, 0, best.vy, -sign*best.vz, 0); }
+  best.r = sim;
+
+  b.x=x0; b.y=y0; b.z=z0; b.prevZ=z0;
+  b.vx=vx; b.vy=best.vy; b.vz=-sign*best.vz;
+  b.sx=0; b.sy=ax/MAGNUS_X;
+  b.stopShot=false; b.serveArc=true; b.stall=0;
+  b.lastHitter=server; b.bounceSide=null; b.bounceCount=0; b.throughHole=null;
+
+  const z2actual = best.r && best.r.b2!==null ? best.r.b2 : wantZ2;
+  if (server==='player'){
+    marker1.position.set(THREE.MathUtils.clamp(p1.x,-TABLE_HALF_X+.06,TABLE_HALF_X-.06), .005, z1);
+    marker1.visible=true;
+    marker2.position.set(THREE.MathUtils.clamp(p2.x,-TABLE_HALF_X+.06,TABLE_HALF_X-.06), .005, z2actual);
+    marker2.visible=true;
+  }
+  G.incomingBounceZ = server==='player' ? z2actual : -0.6;
+  G.serveStep=0; G.phase='rally';
+  el.serveMsg.textContent='';
+  beep(560,.05,'square',.04);
+}
+
+function autoServePoints(server){
+  const own = server==='player'?1:-1;
+  return [
+    { x:(Math.random()-.5)*TABLE_HALF_X*1.2, z: own*(.35+Math.random()*.55) },
+    { x:(Math.random()-.5)*TABLE_HALF_X*1.4, z:-own*(.45+Math.random()*.6) }
+  ];
+}
+function executeServe(){ const p=autoServePoints(G.server); serveFromPoints(G.server,p[0],p[1]); }
+
+// ══════════ 打球 ══════════
+const FX = {
+  top:['ドライブ','#7ee6a8'], back:['カット','#8fd0ff'], side:['横回転','#e0a3ff'],
+  smash:['スマッシュ!','#ff9a5c'], stop:['ストップ','#ffd54a'], flat:[null,null]
+};
+function hitBy(ball, who, dx) {
+  G.rally++; G.totalRally++;
   if (G.rally > G.maxRally) G.maxRally = G.rally;
 
-  const spd = rallySpeed();
-  const toZ = who === 'player' ? CPU_Z : PLAYER_Z;
-  // 狙う着弾点：ラケットのどこに当たったかで左右にブレる
-  const sideSign = who === 'player' ? -1 : 1;
-  const bounceZ = sideSign * (0.45 + Math.random() * 0.45);
-  const vx = dx * 3.4 + (who === 'cpu' ? (Math.random() - 0.5) * 0.22 : 0);
-
-  const r = launch(b.y, b.z, toZ, bounceZ, spd, THREE.MathUtils.clamp(vx, -0.9, 0.9));
-  b.vx = r.vx; b.vy = r.vy; b.vz = r.vz;
-
-  // 面をわずかに越えた位置に押し出して二重ヒットを防ぐ
-  b.z += r.vz > 0 ? 0.02 : -0.02;
-
-  G.lastHitter = who;
-  G.bounceSide = null;
-
-  if (who === 'player') {
-    G.hits++;
-    // CPU の次の挙動を決める
-    G.cpuReactTimer = CPU_DELAY;
-    let missRate = CPU_MISS;
-    const diff = G.pScore - G.cScore;
-    if (diff >= 4) missRate -= 0.04;
-    if (diff <= -4) missRate += 0.06;
-    G.cpuWillMiss = Math.random() < Math.max(0.01, missRate);
+  let sw;
+  if (who==='player') sw = analyzeSwipe();
+  else {
+    const r=Math.random();
+    sw = r<.25 ? {kind:'top',spinX:.7,spinY:0,mult:1.1,timing:'GOOD',smash:false,stop:false}
+               : {kind:'flat',spinX:0,spinY:0,mult:1,timing:'GOOD',smash:false,stop:false};
   }
-  el.rally.textContent = G.rally >= 3 ? 'RALLY ' + G.rally : '';
-}
+  let mult = sw.mult;
+  if (who==='player' && G.powerNext){ mult*=POWER_MULT; G.powerNext=false;
+    pPaddle.userData.face.material.color.setHex(0x3f9dff); }
 
-// ═══════════════════════════════════════════
-//  得点処理
-// ═══════════════════════════════════════════
-function score(who) {
-  if (who === 'player') G.pScore++; else G.cScore++;
-  syncScore(who);
-  el.rally.textContent = '';
+  const isStop = !!sw.stop;
+  const spd = isStop ? STOP_SPEED : THREE.MathUtils.clamp(rallySpeed()*mult, 1.4, VZ_MAX);
+  const toZ = who==='player'?CPU_Z:PLAYER_Z;
+  const sideSign = who==='player'?-1:1;
+  const depth = isStop ? (STOP_DEPTH_MIN+Math.random()*(STOP_DEPTH_MAX-STOP_DEPTH_MIN))
+                       : (.40+Math.random()*.45+(spd>4?.25:0));
+  const bounceZ = sideSign*depth;
 
-  if (G.pScore >= WIN_SCORE || G.cScore >= WIN_SCORE) {
-    finish();
+  const spinY = who==='player'?sw.spinY:0;
+  const tB = Math.abs(bounceZ-ball.z)/spd;
+  const ax = MAGNUS_X*spinY;
+  const hr = HIT_R[who];
+  let aim = who==='player' ? THREE.MathUtils.clamp(dx/hr.x,-1,1)
+                           : THREE.MathUtils.clamp(-dx/hr.x+(Math.random()-.5)*.6,-1,1);
+  const targetX = aim*TABLE_HALF_X*(isStop?.55:AIM_WIDTH);
+  const vx = THREE.MathUtils.clamp((targetX-ball.x-.5*ax*tB*tB)/tB, -VX_LIMIT, VX_LIMIT);
+
+  const r = launchOverNet(ball.y, ball.z, toZ, bounceZ, spd, vx, sw.spinX);
+  ball.vx=r.vx; ball.vy=r.vy; ball.vz=r.vz;
+  ball.sx=sw.spinX; ball.sy=spinY; ball.stopShot=isStop; ball.serveArc=false;
+  ball.z += r.vz>0?.02:-.02;
+  ball.stall=0;
+  ball.lastHitter=who; ball.bounceSide=null; ball.bounceCount=0; ball.throughHole=null;
+
+  // ── 演出 ──
+  const px = ball.x, py = ball.y, pz = ball.z;
+  if (who==='player'){
+    if (sw.smash){
+      burst(px,py,pz,30,0xff8a3c,2.2); G.shake=.16; flash();
+      beep(150,.14,'sawtooth',.09,60); vibrate(30);
+      G.smashCount++;
+    } else if (sw.timing==='PERFECT' && sw.kind!=='flat'){
+      burst(px,py,pz,20,0xffd54a,1.5);
+      beep(880,.07,'square',.055,1320); vibrate(12);
+      G.perfectCount++;
+    } else {
+      burst(px,py,pz,8,0xffffff,.9);
+      beep(700,.045,'square',.04); vibrate(10);
+    }
+    const f=FX[sw.kind];
+    if (sw.timing==='PERFECT' && sw.kind!=='flat' && !sw.smash) showFx((f[0]||'')+' PERFECT','#ffd54a');
+    else if (f[0]) showFx(f[0], f[1]);
+    addGauge(sw.timing==='PERFECT'?GAUGE_PERFECT:GAUGE_NORMAL);
+
+    G.cpuReactTimer = CPU.delay;
+    let miss = CPU.miss;
+    const diff = G.pScore-G.cScore;
+    if (diff>=4) miss-=.04;
+    if (diff<=-4) miss+=.06;
+    if (sw.smash) miss+=.14;
+    if (sw.kind==='back') miss+=.05;
+    if (isStop) miss+=.10;
+    if (G.balls.length>1) miss+=.12;          // 2球同時は取りづらい
+    G.cpuWillMiss = Math.random() < THREE.MathUtils.clamp(miss,.01,.65);
+    G.incomingBounceZ = bounceZ;
   } else {
-    startServe(who);   // 得点した側が次のサーブ
+    burst(px,py,pz,7,0xff9d90,.9);
+    beep(520,.04,'square',.03);
+  }
+  el.rally.textContent = G.rally>=3 ? 'RALLY '+G.rally : '';
+}
+
+function addGauge(v){
+  G.gauge += v;
+  while (G.gauge>=100){
+    G.gauge-=100;
+    const total = G.stock.slow+G.stock.power+G.stock.hole+G.stock.multi;
+    if (total < STOCK_MAX){
+      const keys=['slow','power','hole','multi'];
+      G.stock[keys[Math.floor(Math.random()*keys.length)]]++;
+      showFx('能力ストック +1','#4fd6a0');
+      beep(1046,.12,'triangle',.06,1568);
+    }
+  }
+  syncAbilityUI();
+}
+
+// ══════════ 特殊能力 ══════════
+function useSlow(){
+  if (G.stock.slow<=0 || G.phase!=='rally') return;
+  G.stock.slow--; G.abilityCount++;
+  G.slowTimer=SLOW_DURATION; el.vignette.classList.add('on');
+  showFx('SLOW MOTION','#8fd0ff'); beep(300,.4,'sine',.06,120);
+  syncAbilityUI();
+}
+function usePower(){
+  if (G.stock.power<=0) return;
+  G.stock.power--; G.abilityCount++;
+  G.powerNext=true;
+  pPaddle.userData.face.material.color.setHex(0xff5a2a);
+  showFx('POWER UP','#ff9a5c'); beep(220,.18,'sawtooth',.07,440);
+  syncAbilityUI();
+}
+function useHole(){
+  if (G.stock.hole<=0 || G.awaitHole) return;
+  G.awaitHole = true;
+  el.serveMsg.textContent='自分のコートをタップして穴を置く';
+  showFx('自コートをタップ','#bb7cff');
+}
+function placeHole(x,z){
+  G.stock.hole--; G.abilityCount++; G.awaitHole=false;
+  G.hole = { x:x, z:z, t:HOLE_DURATION };
+  holeGroup.position.set(x,.006,z); holeGroup.visible=true;
+  el.serveMsg.textContent='';
+  showFx('COURT HOLE','#bb7cff'); beep(90,.3,'sine',.08,50);
+  syncAbilityUI();
+}
+function useMulti(){
+  if (G.stock.multi<=0 || G.phase!=='rally') return;
+  if (G.balls.length !== 1) return;
+  // すでに失点が確定待ちのときは使えない（点が溜まり続けるのを防ぐ）
+  if (G.pendingLoss.player > 0 || G.pendingLoss.cpu > 0) return;
+  const src = G.balls[0];
+  const nb = spawnBall();
+  if (!nb) return;
+  G.stock.multi--; G.abilityCount++;
+  // 元の軌道から左右に ±15度 分岐
+  const ca=Math.cos(MULTI_ANGLE), sa=Math.sin(MULTI_ANGLE);
+  const ox=src.vx, oz=src.vz;
+  nb.x=src.x; nb.y=src.y; nb.z=src.z; nb.prevZ=src.prevZ;
+  nb.vx = ox*ca - oz*sa; nb.vz = ox*sa + oz*ca; nb.vy = src.vy;
+  nb.sx=src.sx; nb.sy=src.sy; nb.stopShot=src.stopShot;
+  nb.lastHitter=src.lastHitter; nb.bounceSide=src.bounceSide; nb.bounceCount=src.bounceCount;
+  src.vx = ox*ca + oz*sa; src.vz = -ox*sa + oz*ca;
+  burst(src.x,src.y,src.z,22,0x8affc8,1.6);
+  showFx('MULTI BALL','#7ee6a8'); beep(660,.16,'triangle',.07,990);
+  syncAbilityUI();
+}
+abilBtn.slow.addEventListener('click', useSlow);
+abilBtn.power.addEventListener('click', usePower);
+abilBtn.hole.addEventListener('click', useHole);
+abilBtn.multi.addEventListener('click', useMulti);
+window.addEventListener('keydown', e=>{
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (k==='a') useSlow();
+  else if (k==='s') usePower();
+  else if (k==='d') useHole();
+  else if (k==='f') useMulti();
+});
+
+// ══════════ 得点 ══════════
+function resolvePoints(){
+  // 1ラリーで動く点数は最大2点（マルチボールの2球同時失点まで）
+  const pl=Math.min(G.pendingLoss.player,2), cl=Math.min(G.pendingLoss.cpu,2);
+  G.pendingLoss.player=0; G.pendingLoss.cpu=0;
+  if (pl===0 && cl===0) return;
+  G.pScore += cl;   // CPUが失った分がこちらの得点
+  G.cScore += pl;
+  syncScore(cl>0?'player':'cpu');
+  if (cl>0){ beep(880,.16,'triangle',.07,1320); vibrate(50); flash(); }
+  else { beep(300,.18,'sine',.05,180); }
+  el.rally.textContent='';
+  syncAbilityUI();                       // ゲージは失点しても維持する
+  G.slowTimer=0; el.vignette.classList.remove('on');
+  G.powerNext=false; G.awaitHole=false;
+  pPaddle.userData.face.material.color.setHex(0x3f9dff);
+  G.hole=null; holeGroup.visible=false;
+
+  const winner = cl>0 ? 'player' : 'cpu';
+  if (G.pScore>=WIN_SCORE || G.cScore>=WIN_SCORE) finish();
+  else startServe(winner);
+}
+function loseBall(ball, loser){
+  G.pendingLoss[loser]++;
+  burst(ball.x, Math.max(ball.y,.05), ball.z, 10, loser==='player'?0xff6f6f:0x7fd8ff, 1.1);
+  killBall(ball);
+  if (G.balls.length===0) resolvePoints();
+}
+function finish(){
+  G.phase='over';
+  const win = G.pScore>=WIN_SCORE;
+  el.resultTitle.textContent = win?'WIN!':'LOSE';
+  el.resultTitle.style.color = win?'#ffd54a':'#ff8a7d';
+  el.bigScore.textContent = G.pScore+' - '+G.cScore;
+  el.stMax.textContent=G.maxRally; el.stTotal.textContent=G.totalRally;
+  el.stSmash.textContent=G.smashCount; el.stPerfect.textContent=G.perfectCount;
+  el.stAbility.textContent=G.abilityCount; el.stHole.textContent=G.holeCount;
+  el.result.classList.remove('hidden');
+  clearBalls();
+}
+
+// ══════════ 入力 ══════════
+function setPaddle(cx,cy){
+  const rect=canvas.getBoundingClientRect();
+  const rx=(cx-rect.left)/(rect.width||1);
+  G.playerX=THREE.MathUtils.clamp((rx-.5)*2.05*PADDLE_X_LIM,-PADDLE_X_LIM,PADDLE_X_LIM);
+  const ry=(cy-rect.top)/(rect.height||1);
+  const t=THREE.MathUtils.clamp((ry-Y_BAND_TOP)/Y_BAND_SIZE,0,1);
+  G.playerY=THREE.MathUtils.lerp(PADDLE_Y_MAX,PADDLE_Y_MIN,t);
+}
+function isUI(t){ return t && t.closest && t.closest('#abilityBar, .screen, .btn, #muteBtn'); }
+
+const rayc = new THREE.Raycaster();
+const tablePlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+const ndc = new THREE.Vector2();
+function tableHit(cx,cy){
+  const rect=canvas.getBoundingClientRect();
+  ndc.x=((cx-rect.left)/rect.width)*2-1;
+  ndc.y=-((cy-rect.top)/rect.height)*2+1;
+  rayc.setFromCamera(ndc,camera);
+  const pt=new THREE.Vector3();
+  if (!rayc.ray.intersectPlane(tablePlane,pt)) return null;
+  return pt;
+}
+function onTap(cx,cy){
+  const m=.06;
+  // ホール設置待ち
+  if (G.awaitHole){
+    const pt=tableHit(cx,cy); if(!pt) return;
+    const x=THREE.MathUtils.clamp(pt.x,-TABLE_HALF_X+m,TABLE_HALF_X-m);
+    const z=THREE.MathUtils.clamp(pt.z, .18, TABLE_HALF_Z-m);
+    placeHole(x,z); return;
+  }
+  if (G.phase!=='serve'||G.server!=='player'||G.serveStep===0) return;
+  const pt=tableHit(cx,cy); if(!pt) return;
+  const x=THREE.MathUtils.clamp(pt.x,-TABLE_HALF_X+m,TABLE_HALF_X-m);
+  if (G.serveStep===1){
+    const z=THREE.MathUtils.clamp(pt.z,.12,TABLE_HALF_Z-m);
+    G.serveP1={x,z}; marker1.position.set(x,.005,z); marker1.visible=true;
+    G.serveStep=2; G.serveTimer=12;
+    el.serveMsg.textContent='② 相手のコートをタップ';
+    beep(760,.04,'square',.035);
+  } else {
+    const z=THREE.MathUtils.clamp(pt.z,-TABLE_HALF_Z+m,-.12);
+    G.serveP2={x,z}; marker2.position.set(x,.005,z); marker2.visible=true;
+    serveFromPoints('player',G.serveP1,G.serveP2);
   }
 }
+window.addEventListener('touchstart', e=>{
+  if (isUI(e.target)||!e.touches.length) return;
+  setPaddle(e.touches[0].clientX,e.touches[0].clientY);
+  recordPtr(e.touches[0].clientX,e.touches[0].clientY);
+},{passive:true});
+window.addEventListener('touchmove', e=>{
+  if (isUI(e.target)||!e.touches.length) return;
+  setPaddle(e.touches[0].clientX,e.touches[0].clientY);
+  recordPtr(e.touches[0].clientX,e.touches[0].clientY);
+},{passive:true});
+window.addEventListener('touchend', e=>{
+  if (isUI(e.target)) return;
+  const t=e.changedTouches&&e.changedTouches[0];
+  if (t) onTap(t.clientX,t.clientY);
+},{passive:true});
+window.addEventListener('mousemove', e=>{
+  if (isUI(e.target)) return;
+  setPaddle(e.clientX,e.clientY); recordPtr(e.clientX,e.clientY);
+});
+window.addEventListener('mousedown', e=>{ if(!isUI(e.target)) onTap(e.clientX,e.clientY); });
 
-function finish() {
-  G.phase = 'over';
-  const win = G.pScore >= WIN_SCORE;
-  el.resultTitle.textContent = win ? 'WIN!' : 'LOSE';
-  el.resultTitle.style.color = win ? '#ffd54a' : '#ff8a7d';
-  el.bigScore.textContent = G.pScore + ' - ' + G.cScore;
-  el.stMax.textContent = G.maxRally;
-  el.stTotal.textContent = G.totalRally;
-  const acc = G.swings > 0 ? Math.round(G.hits / G.swings * 100) : 0;
-  el.stAcc.textContent = acc + '%';
-  el.result.classList.remove('hidden');
-}
+// ══════════ 更新 ══════════
+function update(dt){
+  if (G.hole){ G.hole.t -= dt; if (G.hole.t<=0){ G.hole=null; holeGroup.visible=false; } }
 
-// ═══════════════════════════════════════════
-//  入力（第5.1章：ドラッグでX追従）
-// ═══════════════════════════════════════════
-function setPlayerX(clientX) {
-  const rect = canvas.getBoundingClientRect();
-  const ratio = (clientX - rect.left) / (rect.width || 1);
-  G.playerX = THREE.MathUtils.clamp((ratio - 0.5) * 2.05 * PADDLE_X_LIM, -PADDLE_X_LIM, PADDLE_X_LIM);
-}
-// window に付けることで、画面のどこを触っても操作できる
-window.addEventListener('touchstart', e => {
-  if (e.touches && e.touches.length) setPlayerX(e.touches[0].clientX);
-}, { passive: true });
-window.addEventListener('touchmove', e => {
-  if (e.touches && e.touches.length) setPlayerX(e.touches[0].clientX);
-}, { passive: true });
-window.addEventListener('mousemove', e => setPlayerX(e.clientX));
-
-// ═══════════════════════════════════════════
-//  更新
-// ═══════════════════════════════════════════
-function update(dt) {
-  const b = G.b;
-
-  if (G.phase === 'serve') {
-    // サーブ待機中はラケット位置にボールを追従
-    if (G.server === 'player') b.x = G.playerX * 0.5;
-    else b.x = G.cpuX * 0.5;
-    G.serveTimer -= dt;
-    if (G.serveTimer <= 0) executeServe();
-    G.prevZ = b.z;
+  if (G.phase==='serve'){
+    // サーブ待機中はボールをラケットに追従させる
+    const b=G.balls[0];
+    if (b){
+      if (G.server==='player'){
+        G.playerZ += (PLAYER_Z-G.playerZ)*Math.min(1,dt*6);
+        b.x=G.playerX; b.y=G.playerY+0.12; b.z=G.playerZ-0.06;
+      } else {
+        b.x=G.cpuX; b.y=PADDLE_Y+0.12; b.z=G.cpuZ+0.06;
+      }
+      b.prevZ=b.z;
+    }
+    G.serveTimer-=dt;
+    if (G.serveTimer<=0){
+      if (G.server==='player'&&G.serveStep>0){
+        const p=autoServePoints('player');
+        serveFromPoints('player', G.serveP1||p[0], G.serveP2||p[1]);
+      } else executeServe();
+    }
     updateCPU(dt);
     return;
   }
-  if (G.phase !== 'rally') { updateCPU(dt); return; }
+  if (G.phase!=='rally'){ updateCPU(dt); return; }
 
-  G.prevZ = b.z;
-
-  // ── 物理積分 ──
-  b.vy += GRAVITY * dt;
-  b.vx *= AIR_DRAG;
-  b.vz *= AIR_DRAG;
-  b.x += b.vx * dt;
-  b.y += b.vy * dt;
-  b.z += b.vz * dt;
-
-  // ── 台のバウンド ──
-  if (b.y - BALL_R <= 0 && b.vy < 0 &&
-      Math.abs(b.x) <= TABLE_HALF_X && Math.abs(b.z) <= TABLE_HALF_Z) {
-    b.y = BALL_R;
-    b.vy = -b.vy * REST_TABLE;
-    G.bounceSide = b.z > 0 ? 'player' : 'cpu';
+  // ラケットZ：短い球には前に詰め、振りの勢いでさらに踏み込む
+  const sv=recentSwipeSpeed();
+  let advance = PLAYER_Z;
+  const inb = nearestIncomingPlayer();
+  if (inb){
+    const bz = predictBounceZ(inb);
+    if (bz !== null && bz > 0) advance = THREE.MathUtils.clamp(bz + 0.42, PLAYER_Z_MIN, PLAYER_Z);
   }
+  const lunge = THREE.MathUtils.clamp(sv/2200,0,1)*PADDLE_Z_RANGE;
+  const targetZ = THREE.MathUtils.clamp(advance - lunge, PLAYER_Z_MIN, PLAYER_Z);
+  const stepZ = PLAYER_Z_SPEED * dt;
+  const dzP = targetZ - G.playerZ;
+  G.playerZ += Math.abs(dzP) <= stepZ ? dzP : Math.sign(dzP) * stepZ;
+  keepAboveTable();
 
-  // ── ネット衝突（第4.3章） ──
-  if (Math.abs(b.z) < 0.025 && b.y < NET_H + BALL_R && Math.abs(b.x) < NET_HALF_X) {
-    b.vz *= -0.25;
-    b.vy = Math.max(b.vy, 0.1);
-    b.z += b.vz > 0 ? 0.03 : -0.03;
-  }
+  for (let i=G.balls.length-1;i>=0;i--){
+    const b=G.balls[i];
+    if (!b || !b.alive) continue;
+    // 得点が入ると新しいサーブ球が生成されるため、その場でループを抜ける
+    if (G.phase!=='rally') break;
+    b.prevZ=b.z;
+    b.vy += (GRAVITY - MAGNUS_Y*b.sx)*dt;
+    b.vx += MAGNUS_X*b.sy*dt;
+    b.x += b.vx*dt; b.y += b.vy*dt; b.z += b.vz*dt;
 
-  // ── ラケット判定（第4.4章：連続衝突判定） ──
-  checkPaddle('player', PLAYER_Z, G.playerX, 1);
-  checkPaddle('cpu',    CPU_Z,    G.cpuX,   -1);
-
-  updateCPU(dt);
-  checkScore();
-}
-
-// dirSign: そのラケット面を「外向き」に通過する vz の符号
-function checkPaddle(who, planeZ, paddleX, dirSign) {
-  const b = G.b;
-  const crossed = dirSign > 0
-    ? (G.prevZ < planeZ && b.z >= planeZ)
-    : (G.prevZ > planeZ && b.z <= planeZ);
-  if (!crossed) return;
-  if (G.lastHitter === who) return;   // 自分が打った球は自分では取れない
-
-  // 通過時点を線形補間
-  const t = (planeZ - G.prevZ) / (b.z - G.prevZ);
-  const hx = b.x - b.vx * (1 - t) * 0;   // vx は微小なので近似
-  const hitX = b.x;
-  const hitY = b.y;
-
-  if (who === 'player') G.swings++;
-
-  const dx = hitX - paddleX;
-  const dy = hitY - PADDLE_Y;
-
-  if (Math.abs(dx) <= HIT_R_X && Math.abs(dy) <= HIT_R_Y) {
-    // CPU が「ミスする」判定なら空振りさせる
-    if (who === 'cpu' && G.cpuWillMiss) return;
-    b.z = planeZ;
-    hitBy(who, dx);
-  }
-}
-
-function updateCPU(dt) {
-  const b = G.b;
-  // 反応遅延
-  if (G.cpuReactTimer > 0) {
-    G.cpuReactTimer -= dt;
-  } else if (b.vz < 0 && G.phase === 'rally') {
-    // 到達予測（回転がないので x は線形）
-    const tArrive = (CPU_Z - b.z) / b.vz;
-    if (tArrive > 0) {
-      let px = b.x + b.vx * tArrive;
-      px += (Math.random() - 0.5) * CPU_ERROR * dt * 12;
-      if (G.cpuWillMiss) px += (px >= 0 ? -1 : 1) * 0.45;
-      G.cpuTargetX = THREE.MathUtils.clamp(px, -PADDLE_X_LIM, PADDLE_X_LIM);
+    // ホール判定（バウンドしようとした位置が穴の中ならすり抜ける）
+    let inHole=false;
+    if (G.hole && b.y-BALL_R<=0 && b.vy<0){
+      if (Math.hypot(b.x-G.hole.x, b.z-G.hole.z) < HOLE_R){
+        inHole=true; b.throughHole='player';
+        burst(b.x,.02,b.z,14,0xbb7cff,1.3);
+        beep(120,.25,'sine',.07,40);
+      }
     }
-  } else if (G.phase === 'serve' && G.server === 'cpu') {
-    G.cpuTargetX = 0;
-  }
+    // 台のバウンド
+    if (!inHole && b.y-BALL_R<=0 && b.vy<0 &&
+        Math.abs(b.x)<=TABLE_HALF_X && Math.abs(b.z)<=TABLE_HALF_Z){
+      b.y=BALL_R; b.vy=-b.vy*REST_TABLE;
+      if (b.sx>0) b.vz *= 1+.15*b.sx;
+      else if (b.sx<0) b.vz *= 1-.28*(-b.sx);
+      if (b.serveArc){
+        // サーブは2バウンド目まで計算どおりに飛ばす
+        if (b.bounceSide !== null) b.serveArc = false;
+      } else {
+        b.vx += b.sy*.40;
+        b.sx*=.6; b.sy*=.6;
+      }
+      if (b.stopShot){ b.vz*=STOP_BOUNCE_KILL; b.vx*=STOP_BOUNCE_KILL; b.vy*=.72; b.stopShot=false; }
+      b.vz=THREE.MathUtils.clamp(b.vz,-VZ_MAX,VZ_MAX);
+      burst(b.x,.02,b.z,5,0xdff0e6,.6);
+      beep(300,.03,'square',.02);
+      const side = b.z>0?'player':'cpu';
+      if (side===b.bounceSide) b.bounceCount++;
+      else { b.bounceSide=side; b.bounceCount=1; }
+      if (b.bounceCount>=2){ loseBall(b, side); continue; }
+    }
+    // ネット（通過の瞬間だけ判定する。毎フレーム反応すると空中で止まる）
+    const crossNet = (b.prevZ > 0.02 && b.z <= 0.02) || (b.prevZ < -0.02 && b.z >= -0.02);
+    if (crossNet && b.y < NET_H + BALL_R && Math.abs(b.x) < NET_HALF_X){
+      const backSign = b.prevZ > 0 ? 1 : -1;      // 打った側へ落とす
+      b.vz = backSign * Math.max(Math.abs(b.vz) * 0.28, 0.42);
+      b.vy = Math.max(b.vy * 0.3, 0.42);
+      b.vx *= 0.4;
+      b.z = backSign * 0.05;
+      b.sx *= .3; b.sy *= .3;
+      b.stopShot = false;
+      burst(b.x, b.y, 0, 6, 0xffffff, .7);
+      beep(200,.05,'square',.03);
+    }
 
-  const d = G.cpuTargetX - G.cpuX;
-  const step = CPU_SPEED * dt;
-  if (Math.abs(d) <= step) G.cpuX = G.cpuTargetX;
-  else G.cpuX += Math.sign(d) * step;
+    checkPaddle(b,'player',G.playerZ,G.playerX,G.playerY,1);
+    checkPaddle(b,'cpu',   G.cpuZ,   G.cpuX,   G.cpuY,  -1);
+
+    // 得点判定
+    if (b.throughHole && b.y < -0.2){
+      G.holeCount++;
+      loseBall(b, b.throughHole==='player'?'cpu':'player');   // 穴の持ち主の得点
+      continue;
+    }
+    if (b.z > PLAYER_Z+.35){ loseBall(b, b.bounceSide==='player'?'player':'cpu'); continue; }
+    if (b.z < CPU_Z-.35){    loseBall(b, b.bounceSide==='cpu'?'cpu':'player'); continue; }
+
+    // 停滞セーフガード：ほぼ動かない球が残り続けるのを防ぐ
+    const spd2 = Math.hypot(b.vx, b.vy, b.vz);
+    if (spd2 < 0.55 && b.y < 0.12) b.stall += dt; else b.stall = 0;
+    if (b.stall > STALL_LIMIT){
+      const side = b.z > 0 ? 'player' : 'cpu';
+      loseBall(b, side);
+      continue;
+    }
+    if (b.y < -.45){
+      if (b.bounceSide==='player') loseBall(b,'player');
+      else if (b.bounceSide==='cpu') loseBall(b,'cpu');
+      else loseBall(b, b.lastHitter==='player'?'player':'cpu');
+      continue;
+    }
+  }
+  updateCPU(dt);
 }
 
-function checkScore() {
-  const b = G.b;
-
-  // 自分側のラケット面を大きく通過 → 取れなかった
-  if (b.z > PLAYER_Z + 0.35) {
-    // CPU の返球が自分のコートでバウンドしていれば正当な得点
-    if (G.bounceSide === 'player') score('cpu');
-    else score('player');    // CPU のオーバーミス
-    return;
-  }
-  if (b.z < CPU_Z - 0.35) {
-    if (G.bounceSide === 'cpu') score('player');
-    else score('cpu');       // 自分のオーバーミス
-    return;
-  }
-  // 台から落下
-  if (b.y < -0.45) {
-    if (G.bounceSide === 'player')      score('cpu');
-    else if (G.bounceSide === 'cpu')    score('player');
-    else score(G.lastHitter === 'player' ? 'cpu' : 'player'); // ネットミス等
+function checkPaddle(b,who,planeZ,px,py,dirSign){
+  if (b.lastHitter===who) return;
+  const crossed = dirSign>0 ? (b.prevZ<planeZ && b.z>=planeZ) : (b.prevZ>planeZ && b.z<=planeZ);
+  const near = Math.abs(b.z-planeZ)<=.07 && (dirSign>0 ? b.vz>0 : b.vz<0);
+  if (!crossed && !near) return;
+  const hr=HIT_R[who];
+  const dx=b.x-px, dy=b.y-py;
+  if (Math.abs(dx)<=hr.x && Math.abs(dy)<=hr.y){
+    if (who==='cpu' && G.cpuWillMiss) return;
+    b.z=planeZ;
+    hitBy(b,who,dx);
   }
 }
 
-// ═══════════════════════════════════════════
-//  描画同期
-// ═══════════════════════════════════════════
-function sync(dt) {
-  const b = G.b;
-  ball.position.set(b.x, b.y, b.z);
+// ── ラケットが台を貫通しないよう高さを制限する ──
+// 台の真上にいる間は、面もグリップも天板より上に来る高さまで持ち上げる
+function overTable(x, z, R){
+  return Math.abs(x) <= TABLE_HALF_X + R && Math.abs(z) <= TABLE_HALF_Z + 0.03;
+}
+function keepAboveTable(){
+  if (overTable(G.playerX, G.playerZ, PADDLE_R_P))
+    G.playerY = Math.max(G.playerY, MIN_Y_OVER_TABLE_P);
+  if (overTable(G.cpuX, G.cpuZ, PADDLE_R))
+    G.cpuY = Math.max(G.cpuY, MIN_Y_OVER_TABLE_C);
+}
+// 低い位置ほどラケットを後ろに倒し、グリップが天板に刺さらないようにする
+function paddleTilt(y){
+  const t = THREE.MathUtils.clamp((0.30 - y) / 0.16, 0, 1);
+  return t * 1.15;   // 最大約66度
+}
 
-  // 影：台の上にあるときだけ表示
-  const onTable = Math.abs(b.x) <= TABLE_HALF_X && Math.abs(b.z) <= TABLE_HALF_Z;
-  shadow.visible = onTable && b.y > 0;
-  if (shadow.visible) {
-    shadow.position.set(b.x, 0.003, b.z);
-    const s = THREE.MathUtils.clamp(1 - b.y * 0.9, 0.35, 1);
-    shadow.scale.set(s, s, s);
-    shadow.material.opacity = 0.32 * s;
+function nearestIncoming(){
+  let best=null, bt=1e9;
+  for (const b of G.balls){
+    if (b.vz>=0) continue;
+    const t=(CPU_Z-b.z)/b.vz;
+    if (t>0 && t<bt){ bt=t; best=b; }
+  }
+  return best;
+}
+// こちらへ向かってくる球
+function nearestIncomingPlayer(){
+  let best=null, bt=1e9;
+  for (const b of G.balls){
+    if (b.vz<=0) continue;
+    const t=(PLAYER_Z-b.z)/b.vz;
+    if (t>0 && t<bt){ bt=t; best=b; }
+  }
+  return best;
+}
+// 次に台へ着地するZ座標を予測する
+function predictBounceZ(b){
+  const g = Math.abs(GRAVITY) + MAGNUS_Y * b.sx;
+  if (g <= 0.01) return null;
+  const disc = b.vy*b.vy - 2*g*(BALL_R - b.y);
+  if (disc < 0) return null;
+  const t = (b.vy + Math.sqrt(disc)) / g;
+  if (!isFinite(t) || t <= 0) return null;
+  const z = b.z + b.vz * t;
+  if (Math.abs(z) > TABLE_HALF_Z) return null;
+  return z;
+}
+function updateCPU(dt){
+  if (G.cpuReactTimer>0) G.cpuReactTimer-=dt;
+  else if (G.phase==='rally'){
+    const b=nearestIncoming();
+    if (b){
+      const t=(CPU_Z-b.z)/b.vz;
+      const ax=MAGNUS_X*b.sy;
+      let px=b.x+b.vx*t+.5*ax*t*t;
+      px += (Math.random()-.5)*CPU.err*dt*12;
+      if (G.cpuWillMiss) px += (px>=0?-1:1)*.45;
+      G.cpuTargetX=THREE.MathUtils.clamp(px,-PADDLE_X_LIM,PADDLE_X_LIM);
+      const ay=GRAVITY-MAGNUS_Y*b.sx;
+      let py=b.y+b.vy*t+.5*ay*t*t;
+      if (py<PADDLE_Y_MIN) py=PADDLE_Y_MIN+.05;
+      G.cpuTargetY=THREE.MathUtils.clamp(py,PADDLE_Y_MIN,PADDLE_Y_MAX);
+      G.cpuTargetZ=THREE.MathUtils.clamp(G.incomingBounceZ-.34,-1.6,-.42);
+    }
+  } else if (G.phase==='serve'&&G.server==='cpu'){
+    G.cpuTargetX=0; G.cpuTargetY=PADDLE_Y; G.cpuTargetZ=CPU_Z;
+  }
+  const step=CPU.speed*dt;
+  const dx=G.cpuTargetX-G.cpuX;
+  G.cpuX += Math.abs(dx)<=step ? dx : Math.sign(dx)*step;
+  const dy=G.cpuTargetY-G.cpuY, sy=CPU.speed*.8*dt;
+  G.cpuY += Math.abs(dy)<=sy ? dy : Math.sign(dy)*sy;
+  const dz=G.cpuTargetZ-G.cpuZ;
+  G.cpuZ += Math.abs(dz)<=step ? dz : Math.sign(dz)*step;
+  keepAboveTable();
+}
+
+// ══════════ 描画同期 ══════════
+function spinColor(b){
+  // 回転の種類と強さで軌道の色を決める
+  const speed = Math.hypot(b.vx,b.vy,b.vz);
+  if (b.sx > .15)  return { c: 0x3dff9a, i: Math.min(b.sx,1) };        // 上回転：緑
+  if (b.sx < -.15) return { c: 0x4fb6ff, i: Math.min(-b.sx,1) };       // 下回転：青
+  if (Math.abs(b.sy) > .15) return { c: 0xc76bff, i: Math.min(Math.abs(b.sy),1) }; // 横回転：紫
+  if (speed > 4.6) return { c: 0xff8a3c, i: 1 };                       // 高速：橙
+  return { c: 0xfff2c0, i: .35 };
+}
+function sync(){
+  for (const b of G.balls){
+    const v=b.vis;
+    v.mesh.visible=true;
+    v.mesh.position.set(b.x,b.y,b.z);
+    const sc=spinColor(b);
+    v.mat.emissive.setHex(sc.c);
+    v.mat.emissiveIntensity = .25 + sc.i*.55;
+
+    v.hist.unshift([b.x,b.y,b.z]);
+    if (v.hist.length>TRAIL_N) v.hist.pop();
+    for (let i=0;i<TRAIL_N;i++){
+      const p=v.hist[Math.min(i,v.hist.length-1)]||[b.x,b.y,b.z];
+      v.trailPos[i*3]=p[0]; v.trailPos[i*3+1]=p[1]; v.trailPos[i*3+2]=p[2];
+    }
+    v.trailGeo.attributes.position.needsUpdate=true;
+    v.trailMat.color.setHex(sc.c);
+    const sp=Math.hypot(b.vx,b.vy,b.vz);
+    v.trailMat.opacity=THREE.MathUtils.clamp(sp/7*(0.45+sc.i*.75),.12,.92);
+    v.trail.visible=true;
+
+    const onT=Math.abs(b.x)<=TABLE_HALF_X && Math.abs(b.z)<=TABLE_HALF_Z;
+    v.shadow.visible = onT && b.y>0;
+    if (v.shadow.visible){
+      v.shadow.position.set(b.x,.003,b.z);
+      const s=THREE.MathUtils.clamp(1-b.y*.9,.35,1);
+      v.shadow.scale.set(s,s,s);
+      v.shadow.material.opacity=.32*s;
+    }
   }
 
-  pPaddle.position.set(G.playerX, PADDLE_Y, PLAYER_Z);
-  cPaddle.position.set(G.cpuX, PADDLE_Y, CPU_Z);
-  cPaddle.rotation.y = Math.PI;
+  keepAboveTable();
+  pPaddle.position.set(G.playerX,G.playerY,G.playerZ);
+  pPaddle.rotation.x = -paddleTilt(G.playerY);
+  cPaddle.position.set(G.cpuX,G.cpuY,G.cpuZ);
+  cPaddle.rotation.y=Math.PI;
+  cPaddle.rotation.x = -paddleTilt(G.cpuY);
 
-  // ラケットを進行方向へわずかに傾ける（手触りの補助）
-  pPaddle.rotation.z = THREE.MathUtils.lerp(pPaddle.rotation.z, 0, 0.2);
+  if (G.hole){
+    const pulse=.85+Math.sin(performance.now()/140)*.15;
+    holeRing.material.opacity = G.hole.t<1.5 ? (G.hole.t%0.4>0.2?.25:.95) : pulse;
+    holeGroup.scale.set(pulse*.06+.96,1,pulse*.06+.96);
+  }
 
-  // カメラ追従（第3.3章：playerX の 0.25 倍 / lerp 0.1）
-  const targetCamX = G.playerX * 0.25;
-  camera.position.x += (targetCamX - camera.position.x) * 0.1;
-  camLook.x = G.playerX * 0.12;
+  const tx=G.playerX*.25;
+  CAM_BASE.x += (tx-CAM_BASE.x)*.1;
+  camera.position.copy(CAM_BASE);
+  if (G.shake>0){
+    camera.position.x += (Math.random()-.5)*G.shake*.22;
+    camera.position.y += (Math.random()-.5)*G.shake*.22;
+  }
+  camLook.x=G.playerX*.12;
   camera.lookAt(camLook);
 }
 
-// ═══════════════════════════════════════════
-//  ループ
-// ═══════════════════════════════════════════
-const clock = new THREE.Clock();
-function loop() {
-  const dt = Math.min(clock.getDelta(), 0.033);   // 第12章：上限を設ける
-  if (G.phase === 'serve' || G.phase === 'rally') update(dt);
-  sync(dt);
-  renderer.render(scene, camera);
+// ══════════ ループ ══════════
+const clock=new THREE.Clock();
+function loop(){
+  const real=Math.min(clock.getDelta(),.033);
+  if (G.slowTimer>0){
+    G.slowTimer-=real; G.timeScale=SLOW_SCALE;
+    if (G.slowTimer<=0){ G.timeScale=1; el.vignette.classList.remove('on'); }
+  } else G.timeScale=1;
+  if (G.shake>0) G.shake=Math.max(0,G.shake-real*1.2);
+
+  if (G.phase==='serve'||G.phase==='rally') update(real*G.timeScale);
+  updateParticles(real);
+  sync();
+  renderer.render(scene,camera);
   requestAnimationFrame(loop);
 }
 
-// ═══════════════════════════════════════════
-//  画面制御
-// ═══════════════════════════════════════════
-function newGame() {
-  G.pScore = 0; G.cScore = 0;
-  G.maxRally = 0; G.totalRally = 0;
-  G.swings = 0; G.hits = 0;
-  G.cpuX = 0; G.cpuTargetX = 0;
-  syncScore(null);
-  el.rally.textContent = '';
+// ══════════ 画面制御 ══════════
+let difficulty='normal';
+document.querySelectorAll('.diffBtn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.diffBtn').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    difficulty=btn.dataset.d;
+  });
+});
+function newGame(){
+  CPU = DIFF[difficulty];
+  G.pScore=0; G.cScore=0;
+  G.maxRally=0; G.totalRally=0;
+  G.smashCount=0; G.perfectCount=0; G.abilityCount=0; G.holeCount=0;
+  G.cpuX=0; G.cpuTargetX=0;
+  G.playerY=PADDLE_Y; G.cpuY=PADDLE_Y; G.cpuTargetY=PADDLE_Y;
+  G.playerZ=PLAYER_Z; G.cpuZ=CPU_Z; G.cpuTargetZ=CPU_Z;
+  G.gauge=0; G.stock={slow:0,power:0,hole:0,multi:0};
+  G.slowTimer=0; G.powerNext=false; G.timeScale=1;
+  G.hole=null; G.awaitHole=false; holeGroup.visible=false;
+  G.pendingLoss.player=0; G.pendingLoss.cpu=0;
+  G.shake=0;
+  el.vignette.classList.remove('on');
+  pPaddle.userData.face.material.color.setHex(0x3f9dff);
+  syncScore(null); syncAbilityUI();
+  el.rally.textContent='';
   startServe('player');
   clock.getDelta();
 }
-
-document.getElementById('startBtn').addEventListener('click', () => {
-  el.title.classList.add('hidden');
-  newGame();
+document.getElementById('startBtn').addEventListener('click',()=>{
+  initAudio(); el.title.classList.add('hidden'); newGame();
 });
-document.getElementById('againBtn').addEventListener('click', () => {
-  el.result.classList.add('hidden');
-  newGame();
+document.getElementById('againBtn').addEventListener('click',()=>{
+  el.result.classList.add('hidden'); newGame();
 });
-document.getElementById('toTitleBtn').addEventListener('click', () => {
-  el.result.classList.add('hidden');
-  el.title.classList.remove('hidden');
-  G.phase = 'title';
+document.getElementById('toTitleBtn').addEventListener('click',()=>{
+  el.result.classList.add('hidden'); el.title.classList.remove('hidden');
+  G.phase='title'; clearBalls();
 });
 
-sync(0);
-renderer.render(scene, camera);
+syncAbilityUI();
+sync();
+renderer.render(scene,camera);
 loop();
 
 })();
